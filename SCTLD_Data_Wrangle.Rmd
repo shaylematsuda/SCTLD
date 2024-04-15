@@ -1,0 +1,211 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+# This is 16S data from O. Williamson SCTLD juvenile coral experiment. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#16S First pass
+
+```{r}  
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+
+
+library(plyr) 
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(lmerTest)
+library(car)
+library(emmeans)
+library(gridExtra)
+library(multcomp)
+library(reshape)
+library(factoextra)
+library(reshape2)
+library(vegan) 
+library(pairwiseAdonis)
+library("scales")
+packageVersion("scales")
+library(RColorBrewer)
+library(colorRamps)
+library(devtools)
+library(phyloseq)
+library(readr)
+library(vegan)
+library(ape)
+library(geosphere)
+library(ade4)
+library(microbiome)  
+library(knitr)
+library(parzer)
+
+```
+
+#Load in data and get into phyloseq (save RData file)
+```{r}       
+
+#parzer package to deal with coordinates
+# ross coordinates how to process https://github.com/jrcunning/CBASS_FL_Acer/blob/main/data/genotype_metadata_raw.csv
+
+#read in sample data and merge metadata
+MetaData16<-read.csv("Results/genoswap_metadata.csv") #same for ITS2
+MetaData16$species<-as.factor(as.character(MetaData16$species))
+#MetaData16$tube.id<-as.numeric(as.character(MetaData16$tube.id))
+MetaData16$type<-as.factor(as.character(MetaData16$type))
+MetaData16$duplicates<-as.factor(as.character(MetaData16$duplicates))
+
+#split into Frozen vs Fresh for metadata merging
+Fresh<-subset(MetaData16, Swap=="Fresh")
+Frozen<-subset(MetaData16, Swap=="Frozen")
+
+#read in metadata for samp collections for FROZEN
+genSamp<-read.csv("data/geneticSamples.csv") #load in Kelsey/Rish nursery data
+  # notes: swap.genotype is the name to use. the "ziploc genet" name is either bag UM collected in or   the changed name a specific nursery calls the genotype. Swap.geno is the name to use here. Rich      confirmed all cols to the right of 'notes' unneeded
+genSamp2<-genSamp[c(1,4,5)] #keep cols you need
+colnames(genSamp2)[3] ="tube.id" #change col name to sample tube ID
+colnames(genSamp2)[2] <- "genet.ID"
+genSamp2$genet.ID<-gsub("-","",as.character(genSamp2$genet.ID)) #remove all "-", " ", "'"
+genSamp2$genet.ID<-gsub(" ","",as.character(genSamp2$genet.ID)) #remove all "-", " ", "'"
+genSamp2$genet.ID<-gsub("'","",as.character(genSamp2$genet.ID)) #remove all "-", " ", "'"
+genSamp2$collect<-"frozen" #new col to designate fresh collection
+
+#Frozen - merge home location data
+Frozen2<-merge(Frozen,genSamp2, by="tube.id", all.x=T) 
+
+#read in home location for each genet (removed lat/long due to symblols)
+Genotype.Home<-read.csv("data/Genotype.Home.csv") #load in Kelsey/Rish nursery data
+#Genotype.Home<-Genotype.Home[c(1:2)] #keep cols you need
+colnames(Genotype.Home)[1] ="genet.ID" #change col name to sample tube ID
+colnames(Genotype.Home)[2] ="Home.nursery"
+
+  Genotype.Home$genet.ID<-gsub("-","",as.character(Genotype.Home$genet.ID)) #remove all "-", " ", "'"
+  Genotype.Home$genet.ID<-gsub(" ","",as.character(Genotype.Home$genet.ID)) #remove all "-", " ", "'"
+  Genotype.Home$genet.ID<-gsub("'","",as.character(Genotype.Home$genet.ID)) #remove all "-", " ", "'"
+    Genotype.Home<-na.omit(Genotype.Home)
+  Genotype.Home$Home.nursery[Genotype.Home$genet.ID == "FM19"] <- "FWC" #these was coded incorectly in the meta sent to you
+  Genotype.Home$genet.ID[Genotype.Home$genet.ID == "TDT1"] <- "DT1"
+	  Genotype.Home$genet.ID[Genotype.Home$genet.ID == "TDT2"] <- "DT2"
+
+  Genotype.Home$Latitude<-parse_lat(Genotype.Home$Latitude)
+  Genotype.Home$Longitude<-parse_lon(Genotype.Home$Longitude)
+
+  
+#Frozen - merge home location data
+Frozen3<-merge(Frozen2,Genotype.Home, by="genet.ID", all.x=T) 
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML1"] <- "Mote" ### not coded in meta provided to you
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML13"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML29"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML3"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML31"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML34"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML41"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML5"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML50"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML55"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML57"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML6"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML62"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML7"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML84"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML89"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "ML90"] <- "Mote"
+  Frozen3$Home.nursery[Frozen3$genet.ID == "FM19"] <- "FWC"
+#Frozen4<-Frozen3[,c(1:9,11)] #keep all for now
+Frozen4<-subset(Frozen3, select=-c(10))
+
+
+##FRESH
+#upload meta for Fresh samples to merge add to genSamp3 from CRII
+genSamp.Fresh<-read.csv("data/Fresh.meta.away.csv") #load in Kelsey/Rish nursery data
+  genSamp.Fresh$genet.ID<-gsub("-","",as.character(genSamp.Fresh$genet.ID)) #remove all "-", " ", "'"
+  genSamp.Fresh$genet.ID<-gsub(" ","",as.character(genSamp.Fresh$genet.ID)) #remove all "-", " ", "'"
+  genSamp.Fresh$genet.ID<-gsub("'","",as.character(genSamp.Fresh$genet.ID)) #remove all "-", " ", "'"
+  
+#Fresh - merge home location data
+Fresh2<-merge(Fresh,genSamp.Fresh, by="tube.id", all.x=T) 
+Fresh3<-merge(Fresh2,Genotype.Home, all.x=T) 
+  
+#Combine Fresh and Frozen metadata
+meta<-rbind(Fresh3,Frozen4)
+
+meta$frag.id<-paste(meta$genet.ID, meta$Home.nursery, meta$Away.nursery, meta$Swap)
+  meta$tube.id<-as.factor(as.character(meta$tube.id))
+  meta$type<-as.factor(as.character(meta$type))
+  meta$duplicates<-as.factor(as.character(meta$duplicates))
+  meta$sample_name<-as.factor(as.character(meta$sample_name))
+  meta$Swap<-as.factor(as.character(meta$Swap))
+  meta$species<-as.factor(as.character(meta$species))
+  meta$genet.ID<-as.factor(as.character(meta$genet.ID))
+  meta$Away.nursery<-as.factor(as.character(meta$Away.nursery))
+  meta$Home.nursery<-as.factor(as.character(meta$Home.nursery))
+  meta$PCRplate<-as.factor(as.character(meta$PCRplate))
+  meta$frag.id<-as.factor(as.character(meta$frag.id))
+
+#write.csv(meta, "meta.csv") #check 
+
+#Make phyloseq Object
+sam0 <- meta
+#sam1 <- as.matrix(sam0[, -1])
+sam1 <- as.matrix(sam0)
+rownames(sam1) <- sam0$sample_name
+sam <- sample_data(data.frame(sam1))
+#write.csv(sam, "sam.csv")
+
+
+
+
+
+#load in OTU: raw_abundanceTable_100.shared
+OTU3k<-read.table("data/20230804_genoswap_16S-pipeline_outputs/Results/main/details/abundance_table_100.shared.txt", sep='', header=T)
+
+test<-OTU3k
+test$id<-sub("_*", "", test$Group)
+#write.csv(test, "test.csv") #write and use excel to create a index for group. figure out how to do this for real. 
+
+#otu
+otu3k1 <- as.matrix(OTU3k[, -(1:3)]) # remove first col "label"
+# replace the "Group" col with actual sample IDs.
+# make a file with the "group" ids and the sample ids for metadata
+indexes<-read.csv("data/index_new.csv")   #upload the sample ids
+otu3k2<-merge(indexes,OTU3k, by="Group") #add sample names
+otu3k2 <- as.matrix(otu3k2[, -c(1,3:4)]) # remove first col "Group", and label and num OTU
+otu3k2.df<-as.data.frame(otu3k2) #make df copy to make samp names as row names in matrix
+
+rownames(otu3k2) <- otu3k2.df$sample_name
+otu3k2 <- as.matrix(otu3k2[, -(1)]) # remove first col samplename
+otu<-otu3k2
+
+#now it works
+## something is preventing phyloseq from taking otu3k2 as the otu table. but if you save and then reupload it works. 
+write.csv(otu3k2,"otu3k2check.csv")
+testOtu<-read.csv("otu3k2check.csv")
+testOtu2 <- as.matrix(testOtu[, -(1)]) 
+rownames(testOtu2)<- otu3k2.df$sample_name
+otu <- otu_table(testOtu2, taxa_are_rows = FALSE)
+#write.csv(testOtu,"testOtu.csv")
+#tax table annotations_100_taxonomy.csv (edited to be in proper format with proper col names in excel (remove ";"))
+TAX<- read.csv("data/20230804_genoswap_16S-pipeline_outputs/Results/main/details/annotations_100.taxonomy.csv", colClasses = "character") 
+tax1 <- as.matrix(TAX[, -1], dimnames = list(TAX$OTU, colnames(TAX[-1])))
+rownames(tax1) <- TAX$OTU
+tax <- tax_table(tax1)
+
+# Read the data into phyloseq
+Bac.seq = phyloseq(otu, tax,sam) #THIS WORKS
+Bac.seq
+Bac.seq.df <- sample_data(Bac.seq)
+
+#load your tre file FastTree_100.nwk
+treefile<- read.tree("data/20230804_genoswap_16S-pipeline_outputs/Results/postprocessing/unifrac/FastTree_100.nwk")
+phy_tree(Bac.seq) <- treefile
+Bac.seq
+
+save(Bac.seq, file = "data/RData/Bac.seq_phyloseq2500new.RData")
+```
+
+
+
