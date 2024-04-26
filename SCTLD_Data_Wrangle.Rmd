@@ -66,7 +66,7 @@ sam0 <- metadata
 sam1 <- as.matrix(sam0)
 rownames(sam1) <- sam0$sample_name
 sam <- sample_data(data.frame(sam1))
-#write.csv(sam, "sam.csv")
+#write.csv(sam0, "sam.csv")
 
 #load in OTU: abundance_table_100.shared.txt for counts table
 OTU<-read.table("Results/main/details/abundance_table_100.shared.txt", sep='', header=T)
@@ -77,29 +77,50 @@ OTU <- OTU %>%
     mutate(Group = gsub("S\\d{2}\\.L001", "", Group)) %>%
   mutate(Group = gsub("\\.$", "", Group))
 
+
 #otu
-otu1 <- as.matrix(OTU[, -(1:3)]) # remove first col "label"
-# replace the "Group" col with actual sample IDs.
-# make a file with the "group" ids and the sample ids for metadata
-indexes<-read.csv("data/index_new.csv")   #upload the sample ids
-otu2<-merge(indexes,OTU, by="Group") #add sample names
-otu2 <- as.matrix(otu2[, -c(1,3:4)]) # remove first col "Group", and label and num OTU
-otu2.df<-as.data.frame(otu2) #make df copy to make samp names as row names in matrix
+otu1 <- as.matrix(OTU[, -c(1,3)]) # remove first col "label"
+otu2.df<-as.data.frame(otu1) #make df copy to make samp names as row names in matrix
+rownames(otu2.df) <- otu2.df$Group
+otu3 <- as.matrix(otu2.df[, -(1)]) # remove first col samplename
+#write.csv(otu2.df, "otu2.df.csv")
+## something is preventing phyloseq from taking otu as the otu table. but if you save and then reupload it works. 
+write.csv(otu3,"otucheck.csv")
+testOtu<-read.csv("otucheck.csv")
 
-rownames(otu3k2) <- otu3k2.df$sample_name
-otu3k2 <- as.matrix(otu3k2[, -(1)]) # remove first col samplename
-otu<-otu3k2
+#fix Sample names (typos and things not able to pull out above)
+testOtu<-  testOtu %>%
+  mutate(X = gsub("\\.S\\d{1,}\\.L001", "", X))
 
-#now it works
-## something is preventing phyloseq from taking otu3k2 as the otu table. but if you save and then reupload it works. 
-write.csv(otu3k2,"otu3k2check.csv")
-testOtu<-read.csv("otu3k2check.csv")
+  testOtu$X[testOtu$X == "END.PS11.24"] <- "END.PS22.24"
+  testOtu$X[testOtu$X == "END.PS11.37.1"] <- "END.PS22.37.1"
+  testOtu$X[testOtu$X == "END.PS11.46.3"] <- "END.PS22.46.3"
+  testOtu$X[testOtu$X == "END.PS11.9.S9.L001"] <- "END.PS22.9"
+
+  testOtu$X[testOtu$X == "END.CN22.902"] <- "END.CN22.9.2"
+  testOtu$X[testOtu$X == "END.PS22.10.25"] <- "END.PS22.25"
+  testOtu$X[testOtu$X == "END.PS22.10.26"] <- "END.PS22.26"
+    testOtu$X[testOtu$X == "END.PS22.10.26"] <- "END.PS22.26"
+    testOtu$X[testOtu$X == "END.PS22.7.20"] <- "END.PS22.20"
+    testOtu$X[testOtu$X == "END.PS22.7.22"] <- "END.PS22.22"
+    
+    testOtu$X[testOtu$X == "SCTLD.DNA.plate.1.A1"] <- "END.PS22.1"
+    testOtu$X[testOtu$X == "SCTLD.DNA.plate.1.G1"] <- "END.CN22.21.4"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.1.H1"] <- "END.CN22.34"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.2.A1"] <- "END.DL22.1"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.2.H1"] <- "KL.OFAV.4"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.2.H2"] <- "KL.OFAV.5"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.3.A1"] <- "INI.CN22.1"
+   testOtu$X[testOtu$X == "SCTLD.DNA.plate.3.A12"] <- "INI.CN22.12"
+
 testOtu2 <- as.matrix(testOtu[, -(1)]) 
-rownames(testOtu2)<- otu3k2.df$sample_name
+rownames(testOtu2)<- testOtu$X
 otu <- otu_table(testOtu2, taxa_are_rows = FALSE)
-#write.csv(testOtu,"testOtu.csv")
+#write.csv(otu, "checkotu.csv")
 #tax table annotations_100_taxonomy.csv (edited to be in proper format with proper col names in excel (remove ";"))
-TAX<- read.csv("data/20230804_genoswap_16S-pipeline_outputs/Results/main/details/annotations_100.taxonomy.csv", colClasses = "character") 
+
+#taxonomy:
+TAX<- read.csv("Results/main/details/annotations_100.taxonomy.csv", colClasses = "character") 
 tax1 <- as.matrix(TAX[, -1], dimnames = list(TAX$OTU, colnames(TAX[-1])))
 rownames(tax1) <- TAX$OTU
 tax <- tax_table(tax1)
@@ -110,12 +131,63 @@ Bac.seq
 Bac.seq.df <- sample_data(Bac.seq)
 
 #load your tre file FastTree_100.nwk
-treefile<- read.tree("data/20230804_genoswap_16S-pipeline_outputs/Results/postprocessing/unifrac/FastTree_100.nwk")
+treefile<- read.tree("Results/postprocessing/unifrac/FastTree_100.nwk")
 phy_tree(Bac.seq) <- treefile
 Bac.seq
 
-save(Bac.seq, file = "data/RData/Bac.seq_phyloseq2500new.RData")
+save(Bac.seq, file = "RData/Bac.seq1.RData")
 ```
 
+QC data -
+```{r}
+# the df is Bac.seq
+#note - P3/4 NCT traded
+
+## check out data
+ntaxa(Bac.seq)  #num taxa
+nsamples(Bac.seq)   #num samples
+sample_names(Bac.seq) #samp names
+rank_names(Bac.seq) 
+sample_variables(Bac.seq) # metadata cats
+sums<-sample_sums(Bac.seq)
+sums<-as.data.frame(sums)
+#write.csv(sums, "sums.csv")
+
+# create df of sample data to view 
+sample.data <- as(sample_data(Bac.seq), "data.frame") #create sample data frame to view
+sample.data$LibrarySize <- sample_sums(Bac.seq)
+sample.data <- sample.data[order(sample.data$LibrarySize),]
+sample.data$Index <- seq(nrow(sample.data))  
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
+  geom_point()
+
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
+  geom_point()+
+  facet_wrap(~experiment)
+
+richness(Bac.seq)
+plot_richness(Bac.seq, measures = c("Observed","Shannon"), color="type") 
+evenness(Bac.seq)
+
+#NTC (all NTC subsampled out due to low reads)
+NTCs<-subset_samples(Bac.seq, experiment=="NTC")
+TopNOTUsNTC = names(sort(taxa_sums(NTCs), TRUE)[1:200])
+bac50 = prune_taxa(TopNOTUsNTC, NTCs)
+bacBarPlot<-plot_bar(bac50,  fill="Phylum");bacBarPlot #all low
+
+richness(NTCs)
+plot_richness(NTCs, measures = c("Observed","Shannon"))
+evenness(NTCs)
+
+#Mock
+Mock<-subset_samples(Bac.seq, experiment=="Mock")
+TopNOTUsMock = names(sort(taxa_sums(Mock), TRUE)[1:200])
+bac50 = prune_taxa(TopNOTUsMock, Mock)
+bacBarPlot<-plot_bar(bac50,  fill="Phylum");bacBarPlot
+
+richness(Mock)
+plot_richness(Mock, measures = c("Observed","Shannon"))
+evenness(Mock)
+```
 
 

@@ -7,23 +7,64 @@ date: "2024-04-15"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+Data analysis for the 16S SCTLD juvenile experiment
 
-## R Markdown
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+library(plyr) 
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(lmerTest)
+library(car)
+library(emmeans)
+library(gridExtra)
+library(multcomp)
+library(reshape)
+library(factoextra)
+library(reshape2)
+library(vegan) 
+library(pairwiseAdonis)
+library("scales")
+packageVersion("scales")
+library(RColorBrewer)
+library(colorRamps)
+library(devtools)
+library(phyloseq)
+library(readr)
+library(vegan)
+library(ape)
+library(geosphere)
+library(ade4)
+library(microbiome)  
+library(knitr)
 ```
 
-## Including Plots
+#Start analysis here: load in RData if needed
+```{r}
+load("RData/Bac.seq1.RData") #load cleaned data 
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+#Remove Samples identified below in QC
+#remove dups Acer67. Acer67b, Acer272, Acer111, Acer115. Aver68b
+#remove Acer 107, Acer 43 no meta
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer67")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer67b")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer272")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer43") #no meta
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer129") #unreliable meta
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer134")#unreliable meta
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer111")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer175")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer68b")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer107")
+Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer34")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+
+
+
