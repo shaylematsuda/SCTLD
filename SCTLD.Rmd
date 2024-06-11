@@ -88,12 +88,11 @@ s.u.samp.df$code<-paste(s.u.samp.df$treatment,s.u.samp.df$time.point) #treatment
 
 #adonixs test between sample types: p=0.001 between sample types
 set.seed(30)
-adonis2(Bac.seq.wu.all ~ species*code+(1/plug.id), data = s.u.samp.df)
+adonis2(Bac.seq.wu.all ~ species*code, data = s.u.samp.df)
 
-# Homogeneity of dispersion test  - no diffs
-    set.seed(30)
-    permutest(betadisper(Bac.seq.wu.all, s.u.samp.df$code, type = "centroid")) #p=0.004
-  TukeyHSD(Bac.seq.wu.all,  ordered = FALSE,conf.level = 0.95)  
+# Pairwise comparisons using pairwise.adonis2
+pairwise_results <- pairwise.adonis2(Bac.seq.wu.all ~ species, data = s.u.samp.df)
+print(pairwise_results)
 
 #Plot
 
@@ -107,15 +106,17 @@ scores.ord.u_RelA_stats$species <- unifrac.all.sd$species
 scores.ord.u_RelA_stats$treatment <- unifrac.all.sd$treatment
 scores.ord.u_RelA_stats$time.point <- unifrac.all.sd$time.point
 scores.ord.u_RelA_stats$code<-paste(scores.ord.u_RelA_stats$treatment, scores.ord.u_RelA_stats$time.point)
+scores.ord.u_RelA_stats$code <- factor(scores.ord.u_RelA_stats$code, levels = c("control initial", "control final", "disease final"))
 
 #plot 
-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) + 
+p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) + 
   geom_point(aes(colour = code, shape=time.point), size = 4) +
-    scale_color_manual(values=c("darkblue","#56B4E9","red"))+
+  scale_color_manual(values = c("gray", "darkblue", "red")) +
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = code), linetype = 2) +
   ggtitle("NMDS 16s by sample type") +
   theme_classic()+
   facet_wrap(~species)
+ggsave(filename = "Figures/nmds_16s_all.pdf", plot = p, width = 12, height = 6, units = "in")
 
 ```
 
@@ -159,7 +160,7 @@ p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) +
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = species), linetype = 2) +
   ggtitle("Microbiome NMDS") +
   theme_classic()
-ggsave("Initial_NMDS.pdf", plot = p, width = 8, height = 6)
+ggsave("Figures/initial_NMDS.pdf", plot = p, width = 8, height = 6)
 ```
 
 C.nat overview
@@ -276,6 +277,43 @@ Bac.phy.cnat <- Bac.seq.S.rel2.cnat %>%
   #theme(legend.position = "none")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
     ggtitle("C. natans Phylum")   # Add plot title here
+  
+  
+  ### HE from ACE
+  
+  ##Core Analysis
+  cnat.core <- core(Bac.seq.S.rel2.cnat, detection = 0.0001, prevalence = .99)
+cnat.core.taxa <- tax_table(cnat.core)
+View(as.data.frame(cnat.core.taxa))
+
+
+#Trial with a tax glom at family??
+t0.fam <- tax_glom(Bac.seq.S.rel2, "Family", NArm = TRUE)
+t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
+t0.fam.core.taxa <- tax_table(t0.fam.core)
+View(as.data.frame(t0.fam.core.taxa))
+
+#cnat
+#cnat <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#cnat.ra <- transform_sample_counts(cnat, function(x) x/ sum(x))
+
+cnat.core <- core(Bac.seq.S.rel2.cnat, detection = 0.0001, prevalence = .97)
+cnat.core.taxa <- tax_table(cnat.core)
+View(as.data.frame(cnat.core.taxa))
+cnat.core.melt <- psmelt(cnat.core)
+cnat.core.melt$top.group <- "core"
+write.csv(cnat.core.melt, "stats/cnat_core.csv")
+
+##Plotting
+#check # of OTUs
+p.cnat <- ggplot(cnat.core.melt, aes(x = Sample, y = OTU, size = Abundance)) +
+  geom_point() +
+  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9 )) +
+  coord_fixed(ratio = 0.9) +
+  scale_color_manual(values=c("dodgerblue4", "darkorange2","indianred3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
 ```
 
 D. lab overview
