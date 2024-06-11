@@ -190,4 +190,55 @@ plot_richness(Mock, measures = c("Observed","Shannon"))
 evenness(Mock)
 ```
 
+JUST SCTLD
+```{r}
+# look just at SCTLD samples
+Bac.seq.S.2<-subset_samples (Bac.seq, experiment=="SCTLD")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, time.point!= "bath")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "NTC")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "MOCK")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "FLU")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Orbicella faveolata")
+Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Montastrea cavernosa")
+Bac.seq.S.2.sd <- as(sample_data(Bac.seq.S.2), "data.frame") #look at samp data
+
+sample.data <- as(sample_data(Bac.seq.S.2), "data.frame") #create sample data frame to view
+sample.data$LibrarySize <- sample_sums(Bac.seq.S.2)
+sample.data <- sample.data[order(sample.data$LibrarySize),]
+sample.data$Index <- seq(nrow(sample.data))  
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = time.point)) +
+  geom_point()+
+  facet_wrap(~species)
+
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
+  geom_point()+
+  facet_wrap(~experiment)
+
+```
+
+
+JUST FLU
+```{r}
+# look just at SCTLD samples
+Bac.seq.F.2<-subset_samples (Bac.seq, experiment=="FLU")
+Bac.seq.F.2<-subset_samples(Bac.seq.F.2, time.point!= "bath")
+Bac.seq.F.2<-subset_samples(Bac.seq.F.2, experiment!= "NTC")
+Bac.seq.F.2<-subset_samples(Bac.seq.F.2, experiment!= "MOCK")
+
+Bac.seq.F.2.sd <- as(sample_data(Bac.seq.F.2), "data.frame") #look at samp data
+
+sample.data <- as(sample_data(Bac.seq.F.2), "data.frame") #create sample data frame to view
+sample.data$LibrarySize <- sample_sums(Bac.seq.F.2)
+sample.data <- sample.data[order(sample.data$LibrarySize),]
+sample.data$Index <- seq(nrow(sample.data))  
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = treatment)) +
+  geom_point()+
+  facet_wrap(~species)
+
+ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
+  geom_point()+
+  facet_wrap(~experiment)
+
+```
+Notes: consider rerunning 2k cutoff 
 
