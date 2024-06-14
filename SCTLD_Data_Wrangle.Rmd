@@ -135,7 +135,7 @@ treefile<- read.tree("Results/postprocessing/unifrac/FastTree_100.nwk")
 phy_tree(Bac.seq) <- treefile
 Bac.seq
 
-save(Bac.seq, file = "RData/Bac.seq1.RData")
+save(Bac.seq, file = "/Users/smatsuda/Library/CloudStorage/OneDrive-SheddAquariumSociety/Projects/Fluconazole/Fluconazole/RData/Bac.seqFLU.RData")
 ```
 
 QC data -
@@ -214,6 +214,10 @@ ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
   geom_point()+
   facet_wrap(~experiment)
 
+# Filter out samples with fewer than 1500 reads
+Bac.seq.S.2 <- prune_samples(sample_sums(Bac.seq.S.2) >= 1500, Bac.seq.S.2)
+
+save(Bac.seq.S.2, file = "RData/Bac.seq.SCTLD.RData")
 ```
 
 
@@ -238,6 +242,8 @@ ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = treatment)) +
 ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
   geom_point()+
   facet_wrap(~experiment)
+
+save(Bac.seq.F.2, file = "/Users/smatsuda/Library/CloudStorage/OneDrive-SheddAquariumSociety/Projects/Fluconazole/Fluconazole/RData/Bac.seqFLU.RData")
 
 ```
 Notes: consider rerunning 2k cutoff 
