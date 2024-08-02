@@ -658,17 +658,18 @@ Bac.fam.pstr <- Bac.seq.S.rel2.pstr %>%
   Bac.fam.melt.pstr <- psmelt(Bac.fam.pstr)
 
 
-  ggplot(Bac.fam.melt.pstr, aes(x = sample_name, y = Abundance, fill = Family)) +
+  g<-ggplot(Bac.fam.melt.pstr, aes(x = sample_name, y = Abundance, fill = Family)) +
   geom_bar(stat = "identity") +
   #scale_fill_manual(values=pal) +
   #scale_color_manual(values=pal$hex)+
   #scale_fill_manual(values = palette) +  # Use scale_fill_manual() for filling bars
   ylab("Relative Abundance") +
-  xlab("individual") +
+ # xlab("individual") +
   theme(legend.position = "none")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("C. natans Family")   # Add plot title here
-  
+    ggtitle("P. strigosa Family")   # Add plot title here
+  ggsave("Figures/pstr_ini_fam.pdf", plot = g, width =8, height = 6) 
+
   #bar plot
 #phy
 Bac.phy.pstr <- Bac.seq.S.rel2.pstr %>% 
@@ -676,7 +677,7 @@ Bac.phy.pstr <- Bac.seq.S.rel2.pstr %>%
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.phy.melt.pstr <- psmelt(Bac.phy.pstr)
 
-  ggplot(Bac.phy.melt.pstr, aes(x = sample_name, y = Abundance, fill = Phylum)) +
+  j<-ggplot(Bac.phy.melt.pstr, aes(x = sample_name, y = Abundance, fill = Phylum)) +
   geom_bar(stat = "identity") +
   #scale_fill_manual(values=pal) +
   #scale_color_manual(values=pal$hex)+
@@ -685,8 +686,9 @@ Bac.phy.pstr <- Bac.seq.S.rel2.pstr %>%
   xlab("individual") +
   #theme(legend.position = "none")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("D.lab Phylum")   # Add plot title here
-  
+    ggtitle("P. strigosa Phylum")   # Add plot title here
+    ggsave("Figures/pstr_ini_phy.pdf", plot = j, width =8, height = 6) 
+
   
   ### HE from ACE
   
