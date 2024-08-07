@@ -10,7 +10,6 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 Data analysis for the 16S SCTLD juvenile experiment
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -47,8 +46,7 @@ library(knitr)
 ```{r}
 load("RData/Bac.seq.SCTLD.RData") #load cleaned data 
 
-#Remove Samples identified below in QC
-#Bac.seq <- subset_samples(Bac.seq, sample_name != "Acer67")
+sampdata <- as(sample_data(Bac.seq.S.2), "data.frame") #look at samp data
 ```
 
 #Set up, Bac.s relative abundaces: Bac.seq.rel (Bac.seq for alpha)
@@ -57,64 +55,38 @@ load("RData/Bac.seq.SCTLD.RData") #load cleaned data
 Bac.seq.rel  = transform_sample_counts(Bac.seq.S.2, function(x) x / sum(x) )  #save as RELA DIVs
 data.Bac.seq.rel.sd <- as(sample_data(Bac.seq.rel), "data.frame") #look at samp data
 data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel) > 0, Bac.seq.rel) #this removes any OTU with 0s
-
-#heatmap
-  #plot_heatmap(Bac.s.rel, method = "NMDS", distance = "bray")# way too much data
-
 ``` 
 
-Separate out SCTLD only
-```{r}
-# data.Bac.seq.rel df
-Bac.seq.S.rel<-subset_samples (Bac.seq.S.2, experiment=="SCTLD")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel, time.point!= "bath")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel2, experiment!= "NTC")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel2, experiment!= "MOCK")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel2, experiment!= "FLU")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel2, species!= "Orbicella faveolata")
-Bac.seq.S.rel2<-subset_samples(Bac.seq.S.rel2, species!= "Montastrea cavernosa")
-Bac.seq.S.rel2 = prune_taxa(taxa_sums(Bac.seq.S.rel2) > 0, Bac.seq.S.rel2) #this removes any OTU with 0s
-
-Bac.seq.S.rel2.sd <- as(sample_data(Bac.seq.S.rel2), "data.frame") #look at samp data
-
-#RAW
-
-Bac.seq.S.raw<-subset_samples (Bac.seq.S.2, experiment=="SCTLD")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw, time.point!= "bath")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw2, experiment!= "NTC")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw2, experiment!= "MOCK")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw2, experiment!= "FLU")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw2, species!= "Orbicella faveolata")
-Bac.seq.S.raw2<-subset_samples(Bac.seq.S.raw2, species!= "Montastrea cavernosa")
-Bac.seq.S.raw2 = prune_taxa(taxa_sums(Bac.seq.S.raw2) > 0, Bac.seq.S.raw2) #this removes any OTU with 0s
-
-Bac.seq.S.raw2.sd <- as(sample_data(Bac.seq.S.raw2), "data.frame") #look at samp data
-
-
-```
 
 Unifrac
 ```{r}
 #make unifrac matrix
-Bac.seq.wu.all <- phyloseq::distance(Bac.seq.S.rel2, method = "wunifrac")
-s.u.samp.df <- as(sample_data(Bac.seq.S.rel2), "data.frame") #sample df
+Bac.seq.wu.all <- phyloseq::distance(Bac.seq.rel, method = "wunifrac")
+s.u.samp.df <- as(sample_data(Bac.seq.rel), "data.frame") #sample df
 s.u.samp.df$code<-paste(s.u.samp.df$treatment,s.u.samp.df$time.point) #treatment*timepoint code
 
-#adonixs test between sample types: p=0.001 between sample types
+#adonixs test between species: p=0.001 
 set.seed(30)
-adonis2(Bac.seq.wu.all ~ species*code, data = s.u.samp.df)
+adonis2(Bac.seq.wu.all ~ species, data = s.u.samp.df)
 
-# Pairwise comparisons using pairwise.adonis2
+# Pairwise comparisons using pairwise.adonis2 between species pairs: all sig diff
 pairwise_results <- pairwise.adonis2(Bac.seq.wu.all ~ species, data = s.u.samp.df)
 print(pairwise_results)
 
-#Plot
+#adonixs test between species*treatment*time.point: all sig
+set.seed(30)
+adonis2(Bac.seq.wu.all ~ species*treatment*time.point, data = s.u.samp.df)
 
+# Pairwise comparisons using pairwise.adonis2 between species pairs: all sig diff
+pairwise_results <- pairwise.adonis2(Bac.seq.wu.all ~ species*treatment*time.point, data = s.u.samp.df)
+print(pairwise_results)
+
+#Plot
 #nmds
-unifrac.all <- ordinate(Bac.seq.S.rel2, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
+unifrac.all <- ordinate(Bac.seq.rel, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
 stressplot(unifrac.all)
 scores.ord.u_RelA_stats<-as.data.frame(cbind(vegan::scores(unifrac.all, display="sites")))  
-     unifrac.all.sd <- as(sample_data(Bac.seq.S.rel2), "data.frame") #sample df
+     unifrac.all.sd <- as(sample_data(Bac.seq.rel), "data.frame") #sample df
 
 scores.ord.u_RelA_stats$species <- unifrac.all.sd$species
 scores.ord.u_RelA_stats$treatment <- unifrac.all.sd$treatment
@@ -129,28 +101,28 @@ p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) +
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = code), linetype = 2) +
   ggtitle("NMDS 16s by sample type") +
   theme_classic()+
-  facet_wrap(~species)
+  facet_wrap(~species);p
 ggsave(filename = "Figures/nmds_16s_all.pdf", plot = p, width = 12, height = 6, units = "in")
 
 ```
 
 #Initial only - differences between species
 ```{r}
-Bac.seq.S.rel.initial<-subset_samples (Bac.seq.S.rel2, time.point=="initial")
+Bac.seq.S.rel.initial<-subset_samples (Bac.seq.rel, time.point=="initial")
 Bac.seq.S.rel.initial = prune_taxa(taxa_sums(Bac.seq.S.rel.initial) > 0, Bac.seq.S.rel.initial) 
 #make unifrac matrix
 Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.S.rel.initial, method = "wunifrac")
 s.u.samp.df.ini <- as(sample_data(Bac.seq.S.rel.initial), "data.frame") #sample df
 
   
-#adonixs test between sample types: p=0.001 between sample types
+#adonixs test between sample types: p=0.001 between species types
 set.seed(30)
 adonis_results<-adonis2(Bac.seq.wu.ini ~ species, data = s.u.samp.df.ini)
 # Pairwise comparisons using pairwise.adonis2
 pairwise_results <- pairwise.adonis2(Bac.seq.wu.ini ~ species, data = s.u.samp.df.ini)
 print(pairwise_results)
 
-# Homogeneity of dispersion test  - no diffs
+# Homogeneity of dispersion test
 set.seed(30)
 betadisper_result <- betadisper(Bac.seq.wu.ini, s.u.samp.df.ini$species, type = "centroid")
 permutest_result <- permutest(betadisper_result)
@@ -173,7 +145,7 @@ p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) +
     scale_color_manual(values=c("orange","turquoise3","seagreen"))+
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = species), linetype = 2) +
   ggtitle("Microbiome NMDS") +
-  theme_classic()
+  theme_classic();p
 ggsave("Figures/initial_NMDS.pdf", plot = p, width = 8, height = 6)
 
 
@@ -238,12 +210,12 @@ print(only_set2)
 C.nat Initial only
 ```{r}
 #cnat
-Bac.seq.S.rel2.cnat<-subset_samples(Bac.seq.S.rel2, species=="Colpophyllia natans")
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.cnat) > 0, Bac.seq.S.rel2.cnat) #this removes any OTU with 0s
-Bac.seq.S.rel2.cnat<-subset_samples(Bac.seq.S.rel2.cnat, time.point=="initial")
+Bac.seq.rel.cnat<-subset_samples(Bac.seq.rel, species=="Colpophyllia natans")
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.cnat) > 0, Bac.seq.rel.cnat) #this removes any OTU with 0s
+Bac.seq.rel.cnat<-subset_samples(Bac.seq.rel.cnat, time.point=="initial")
 
 # Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.S.rel2.cnat)
+otu_table <- otu_table(Bac.seq.rel.cnat)
 
 # Count the number of non-zero counts for each taxa across all samples
 taxa_presence <- rowSums(otu_table > 0) 
@@ -251,8 +223,8 @@ num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count 
 print(num_taxa_present_in_all_samples)# Print the result - it's zero
 
 # Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.S.rel2.cnat, detection = 1/100)
-tax_table <- tax_table(Bac.seq.S.rel2.cnat)
+taxa_prevalence <- prevalence(Bac.seq.rel.cnat, detection = 1/100)
+tax_table <- tax_table(Bac.seq.rel.cnat)
 
 # Filter taxa with prevalence greater than 1%
 taxa_greater_than_80_percent <- taxa_prevalence[taxa_prevalence > 0.80]
@@ -267,7 +239,7 @@ print(taxa_names_greater_than_80_percent)
 
 
 # Count unique taxa
-taxa_levels <- as.data.frame(tax_table(Bac.seq.S.rel2.cnat))
+taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.cnat))
 unique_species <- n_distinct(taxa_levels$Species)
 unique_genera <- n_distinct(taxa_levels$Genus)
 unique_families <- n_distinct(taxa_levels$Family)
@@ -277,7 +249,7 @@ print(unique_genera)
 print(unique_families)
 
 # Extract OTU names
-otu_names <- taxa_names(Bac.seq.S.rel2.cnat)
+otu_names <- taxa_names(Bac.seq.rel.cnat)
 
 # Count the number of unique OTUs
 num_unique_otus <- length(unique(otu_names))
@@ -286,15 +258,15 @@ num_unique_otus <- length(unique(otu_names))
 print(num_unique_otus)
 
 # Count unique OTUs or ASVs (this is too high res)
-otu_table <- otu_table(Bac.seq.S.rel2.cnat)
+otu_table <- otu_table(Bac.seq.rel.cnat)
 unique_otus <- sum(otu_table > 0, na.rm = TRUE)
 print(unique_otus)
 
-core.taxa.standard <- core_members(Bac.seq.S.rel2.cnat, detection = 0.0001, prevalence = .95)
+core.taxa.standard <- core_members(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .95)
 core.taxa.standard
 
 #Try again with genus level
-cnat.rel.gen <- aggregate_taxa(Bac.seq.S.rel2.cnat, "Family")
+cnat.rel.gen <- aggregate_taxa(Bac.seq.rel.cnat, "Family")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 par(cex = 0.2)  # Adjust the value (0.8) to make the text smaller
@@ -309,7 +281,7 @@ p1 <- plot_core(cnat.rel.gen,
 p1 <- p1 + theme_bw() + ylab("ASVs")
 p1
 
-cnat.genus <- aggregate_taxa(Bac.seq.S.rel2.cnat, "Genus")
+cnat.genus <- aggregate_taxa(Bac.seq.rel.cnat, "Genus")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 
@@ -324,7 +296,7 @@ p1
 
 #bar plot
 #family
-Bac.fam.cnat <- Bac.seq.S.rel2.cnat %>% 
+Bac.fam.cnat <- Bac.seq.rel.cnat %>% 
   tax_glom(taxrank = "Family", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.fam.melt.cnat <- psmelt(Bac.fam.cnat)
@@ -344,7 +316,7 @@ Bac.fam.cnat <- Bac.seq.S.rel2.cnat %>%
   #bar plot
   
 #phy
-Bac.phy.cnat <- Bac.seq.S.rel2.cnat %>% 
+Bac.phy.cnat <- Bac.seq.rel.cnat %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.phy.melt.cnat <- psmelt(Bac.phy.cnat)
@@ -363,22 +335,22 @@ Bac.phy.cnat <- Bac.seq.S.rel2.cnat %>%
 ### HE from ACE
   
   ##Core Analysis
-  cnat.core <- core(Bac.seq.S.rel2.cnat, detection = 0.0001, prevalence = .99)
+  cnat.core <- core(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .99)
 cnat.core.taxa <- tax_table(cnat.core)
 View(as.data.frame(cnat.core.taxa))
 
 
 #Trial with a tax glom at family??
-t0.fam <- tax_glom(Bac.seq.S.rel2, "Family", NArm = TRUE)
+t0.fam <- tax_glom(Bac.seq.rel, "Family", NArm = TRUE)
 t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
 t0.fam.core.taxa <- tax_table(t0.fam.core)
 View(as.data.frame(t0.fam.core.taxa))
 
 #cnat
-#cnat <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#cnat <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #cnat.ra <- transform_sample_counts(cnat, function(x) x/ sum(x))
 
-cnat.core <- core(Bac.seq.S.rel2.cnat, detection = 0.0001, prevalence = .97)
+cnat.core <- core(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .97)
 cnat.core.taxa <- tax_table(cnat.core)
 View(as.data.frame(cnat.core.taxa))
 cnat.core.melt <- psmelt(cnat.core)
@@ -401,12 +373,12 @@ ggsave("Figures/cnat_core_bubble.pdf")
 D. lab overview
 ```{r}
 #dlab
-Bac.seq.S.rel2.dlab<-subset_samples(Bac.seq.S.rel2, species=="Diploria labyrinthiformis")
-data.Bac.seq.rel.dlab = prune_taxa(taxa_sums(Bac.seq.S.rel2.dlab) > 0, Bac.seq.S.rel2.dlab) #this removes any OTU with 0s
-Bac.seq.S.rel2.dlab<-subset_samples(Bac.seq.S.rel2.dlab, time.point=="initial")
+Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel, species=="Diploria labyrinthiformis")
+data.Bac.seq.rel.dlab = prune_taxa(taxa_sums(Bac.seq.rel.dlab) > 0, Bac.seq.rel.dlab) #this removes any OTU with 0s
+Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel.dlab, time.point=="initial")
 
 # Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.S.rel2.dlab)
+otu_table <- otu_table(Bac.seq.rel.dlab)
 
 # Count the number of non-zero counts for each taxa across all samples
 taxa_presence <- rowSums(otu_table > 0) 
@@ -414,8 +386,8 @@ num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count 
 print(num_taxa_present_in_all_samples)# Print the result - it's zero
 
 # Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.S.rel2.dlab, detection = 1/100)
-tax_table <- tax_table(Bac.seq.S.rel2.dlab)
+taxa_prevalence <- prevalence(Bac.seq.rel.dlab, detection = 1/100)
+tax_table <- tax_table(Bac.seq.rel.dlab)
 
 
 # Filter taxa with prevalence greater than 1%
@@ -431,7 +403,7 @@ print(taxa_names_greater_than_80_percent)
 
 
 # Count unique taxa
-taxa_levels <- as.data.frame(tax_table(Bac.seq.S.rel2.dlab))
+taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.dlab))
 unique_species <- n_distinct(taxa_levels$Species)
 unique_genera <- n_distinct(taxa_levels$Genus)
 unique_families <- n_distinct(taxa_levels$Family)
@@ -441,7 +413,7 @@ print(unique_genera)
 print(unique_families)
 
 # Extract OTU names
-otu_names <- taxa_names(Bac.seq.S.rel2.dlab)
+otu_names <- taxa_names(Bac.seq.rel.dlab)
 
 # Count the number of unique OTUs
 num_unique_otus <- length(unique(otu_names))
@@ -450,15 +422,15 @@ num_unique_otus <- length(unique(otu_names))
 print(num_unique_otus)
 
 # Count unique OTUs or ASVs (this is too high res)
-otu_table <- otu_table(Bac.seq.S.rel2.dlab)
+otu_table <- otu_table(Bac.seq.rel.dlab)
 unique_otus <- sum(otu_table > 0, na.rm = TRUE)
 print(unique_otus)
 
-core.taxa.standard <- core_members(Bac.seq.S.rel2.dlab, detection = 0.0001, prevalence = .95)
+core.taxa.standard <- core_members(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .95)
 core.taxa.standard
 
 #Try again with genus level (lots of unclassified, so at family)
-dlab.rel.gen <- aggregate_taxa(Bac.seq.S.rel2.dlab, "Family")
+dlab.rel.gen <- aggregate_taxa(Bac.seq.rel.dlab, "Family")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 par(cex = 0.2)  # Adjust the value (0.8) to make the text smaller
@@ -473,7 +445,7 @@ p1 <- plot_core(dlab.rel.gen,
 p1 <- p1 + theme_bw() + ylab("ASVs")
 p1
 
-dlab.genus <- aggregate_taxa(Bac.seq.S.rel2.dlab, "Genus")
+dlab.genus <- aggregate_taxa(Bac.seq.rel.dlab, "Genus")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 
@@ -488,7 +460,7 @@ p1
 
 #bar plot
 #family
-Bac.fam.dlab <- Bac.seq.S.rel2.dlab %>% 
+Bac.fam.dlab <- Bac.seq.rel.dlab %>% 
   tax_glom(taxrank = "Family", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.fam.melt.dlab <- psmelt(Bac.fam.dlab)
@@ -507,7 +479,7 @@ Bac.fam.dlab <- Bac.seq.S.rel2.dlab %>%
   
   #bar plot
 #phy
-Bac.phy.dlab <- Bac.seq.S.rel2.dlab %>% 
+Bac.phy.dlab <- Bac.seq.rel.dlab %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.phy.melt.dlab <- psmelt(Bac.phy.dlab)
@@ -527,22 +499,22 @@ Bac.phy.dlab <- Bac.seq.S.rel2.dlab %>%
   ### HE from ACE
   
   ##Core Analysis
-dlab.core <- core(Bac.seq.S.rel2.dlab, detection = 0.0001, prevalence = .99)
+dlab.core <- core(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .99)
 dlab.core.taxa <- tax_table(dlab.core)
 View(as.data.frame(dlab.core.taxa))
 
 
 #Trial with a tax glom at family??
-t0.fam <- tax_glom(Bac.seq.S.rel2, "Family", NArm = TRUE)
+t0.fam <- tax_glom(Bac.seq.rel, "Family", NArm = TRUE)
 t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
 t0.fam.core.taxa <- tax_table(t0.fam.core)
 View(as.data.frame(t0.fam.core.taxa))
 
 #dlab
-#dlab <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#dlab <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #dlab.ra <- transform_sample_counts(dlab, function(x) x/ sum(x))
 
-dlab.core <- core(Bac.seq.S.rel2.dlab, detection = 0.0001, prevalence = .97)
+dlab.core <- core(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .97)
 dlab.core.taxa <- tax_table(dlab.core)
 View(as.data.frame(dlab.core.taxa))
 dlab.core.melt <- psmelt(dlab.core)
@@ -564,13 +536,13 @@ ggsave("Figures/dlab_core_bubble.pdf")
 Pstr overview
 ```{r}
 #pstr
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2, species=="Pseudodiploria strigosa")
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2.pstr, time.point=="initial")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel.pstr, time.point=="initial")
 
-data.Bac.seq.rel.pstr = prune_taxa(taxa_sums(Bac.seq.S.rel2.pstr) > 0, Bac.seq.S.rel2.pstr) #this removes any OTU with 0s
+data.Bac.seq.rel.pstr = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
 
 # Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.S.rel2.pstr)
+otu_table <- otu_table(Bac.seq.rel.pstr)
 
 # Count the number of non-zero counts for each taxa across all samples
 taxa_presence <- rowSums(otu_table > 0) 
@@ -578,8 +550,8 @@ num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count 
 print(num_taxa_present_in_all_samples)# Print the result - it's zero
 
 # Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.S.rel2.pstr, detection = 1/100)
-tax_table <- tax_table(Bac.seq.S.rel2.pstr)
+taxa_prevalence <- prevalence(Bac.seq.rel.pstr, detection = 1/100)
+tax_table <- tax_table(Bac.seq.rel.pstr)
 
 
 # Filter taxa with prevalence greater than 1%
@@ -595,7 +567,7 @@ print(taxa_names_greater_than_80_percent)
 
 
 # Count unique taxa
-taxa_levels <- as.data.frame(tax_table(Bac.seq.S.rel2.pstr))
+taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.pstr))
 unique_species <- n_distinct(taxa_levels$Species)
 unique_genera <- n_distinct(taxa_levels$Genus)
 unique_families <- n_distinct(taxa_levels$Family)
@@ -605,7 +577,7 @@ print(unique_genera)
 print(unique_families)
 
 # Extract OTU names
-otu_names <- taxa_names(Bac.seq.S.rel2.pstr)
+otu_names <- taxa_names(Bac.seq.rel.pstr)
 
 # Count the number of unique OTUs
 num_unique_otus <- length(unique(otu_names))
@@ -614,15 +586,15 @@ num_unique_otus <- length(unique(otu_names))
 print(num_unique_otus)
 
 # Count unique OTUs or ASVs (this is too high res)
-otu_table <- otu_table(Bac.seq.S.rel2.pstr)
+otu_table <- otu_table(Bac.seq.rel.pstr)
 unique_otus <- sum(otu_table > 0, na.rm = TRUE)
 print(unique_otus)
 
-core.taxa.standard <- core_members(Bac.seq.S.rel2.pstr, detection = 0.0001, prevalence = .99)
+core.taxa.standard <- core_members(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .99)
 core.taxa.standard
 
 #Try again with genus level (lots of unclassified, so at family)
-pstr.rel.gen <- aggregate_taxa(Bac.seq.S.rel2.pstr, "Family")
+pstr.rel.gen <- aggregate_taxa(Bac.seq.rel.pstr, "Family")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 par(cex = 0.2)  # Adjust the value (0.8) to make the text smaller
@@ -637,7 +609,7 @@ p1 <- plot_core(pstr.rel.gen,
 p1 <- p1 + theme_bw() + ylab("ASVs")
 p1
 
-pstr.genus <- aggregate_taxa(Bac.seq.S.rel2.pstr, "Genus")
+pstr.genus <- aggregate_taxa(Bac.seq.rel.pstr, "Genus")
 prevalences <- seq(.05, 1, .05)
 detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
 
@@ -652,7 +624,7 @@ p1
 
 #bar plot
 #family
-Bac.fam.pstr <- Bac.seq.S.rel2.pstr %>% 
+Bac.fam.pstr <- Bac.seq.rel.pstr %>% 
   tax_glom(taxrank = "Family", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.fam.melt.pstr <- psmelt(Bac.fam.pstr)
@@ -672,7 +644,7 @@ Bac.fam.pstr <- Bac.seq.S.rel2.pstr %>%
 
   #bar plot
 #phy
-Bac.phy.pstr <- Bac.seq.S.rel2.pstr %>% 
+Bac.phy.pstr <- Bac.seq.rel.pstr %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
   Bac.phy.melt.pstr <- psmelt(Bac.phy.pstr)
@@ -693,22 +665,22 @@ Bac.phy.pstr <- Bac.seq.S.rel2.pstr %>%
   ### HE from ACE
   
   ##Core Analysis
-pstr.core <- core(Bac.seq.S.rel2.pstr, detection = 0.0001, prevalence = .97)
+pstr.core <- core(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .97)
 pstr.core.taxa <- tax_table(pstr.core)
 View(as.data.frame(pstr.core.taxa))
 
 
 #Trial with a tax glom at family??
-t0.fam <- tax_glom(Bac.seq.S.rel2, "Family", NArm = TRUE)
+t0.fam <- tax_glom(Bac.seq.rel, "Family", NArm = TRUE)
 t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
 t0.fam.core.taxa <- tax_table(t0.fam.core)
 View(as.data.frame(t0.fam.core.taxa))
 
 #pstr
-#pstr <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#pstr <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #pstr.ra <- transform_sample_counts(pstr, function(x) x/ sum(x))
 
-pstr.core <- core(Bac.seq.S.rel2.pstr, detection = 0.0001, prevalence = .97)
+pstr.core <- core(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .97)
 pstr.core.taxa <- tax_table(pstr.core)
 View(as.data.frame(pstr.core.taxa))
 pstr.core.melt <- psmelt(pstr.core)
@@ -729,16 +701,10 @@ ggsave("Figures/pstr_core_bubble.pdf")
 ```
 
 
-
-
-
-
-
-
 Bar plots
 ```{r}
 
-Bac.phy <- Bac.seq.S.rel2 %>% 
+Bac.phy <- Bac.seq.rel %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
 Bac.phy.melt <- psmelt(Bac.phy)
@@ -778,9 +744,9 @@ ggplot(Bac.phy.melt, aes(x = sample_name, y = Abundance, fill = Phylum)) +
 #plot by species at Phylum
 ```{r}
 #cnat
-Bac.seq.S.rel2.cnat<-subset_samples(Bac.seq.S.rel2, species=="Colpophyllia natans")
-Bac.seq.S.rel2.cnat.sd <- as(sample_data(Bac.seq.S.rel2.cnat), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.cnat) > 0, Bac.seq.S.rel2.cnat) #this removes any OTU with 0s
+Bac.seq.rel.cnat<-subset_samples(Bac.seq.rel, species=="Colpophyllia natans")
+Bac.seq.rel.cnat.sd <- as(sample_data(Bac.seq.rel.cnat), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.cnat) > 0, Bac.seq.rel.cnat) #this removes any OTU with 0s
 
 Bac.phy.cnat <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
@@ -802,9 +768,9 @@ Bac.phy.cnat <- data.Bac.seq.rel %>%
    facet_wrap(~ code, ncol=1, scales = "free_x")
 
 #pstr
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2, species=="Pseudodiploria strigosa")
-Bac.seq.S.rel2.pstr.sd <- as(sample_data(Bac.seq.S.rel2.pstr), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.pstr) > 0, Bac.seq.S.rel2.pstr) #this removes any OTU with 0s
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa")
+Bac.seq.rel.pstr.sd <- as(sample_data(Bac.seq.rel.pstr), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
 
 Bac.phy.pstr <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
@@ -826,10 +792,10 @@ Bac.phy.pstr <- data.Bac.seq.rel %>%
    facet_wrap(~ code, ncol=1, scales = "free_x")
 
 #dlab
-Bac.seq.S.rel2.dlab<-subset_samples(Bac.seq.S.rel2, species=="Diploria labyrinthiformis")
-Bac.seq.S.rel2.dlab<-subset_samples(Bac.seq.S.rel2.dlab, time.point=="initial")
-Bac.seq.S.rel2.dlab.sd <- as(sample_data(Bac.seq.S.rel2.dlab), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.dlab) > 0, Bac.seq.S.rel2.dlab) #this removes any OTU with 0s
+Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel, species=="Diploria labyrinthiformis")
+Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel.dlab, time.point=="initial")
+Bac.seq.rel.dlab.sd <- as(sample_data(Bac.seq.rel.dlab), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.dlab) > 0, Bac.seq.rel.dlab) #this removes any OTU with 0s
 
 Bac.phy.dlab <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
@@ -873,11 +839,11 @@ ggsave("Figures/dlab_ini_fam2.pdf", plot = f, width = 8, height = 6)
 
 
 #pster
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2, species=="Pseudodiploria strigosa")
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2.pstr, time.point=="initial")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel.pstr, time.point=="initial")
 
-Bac.seq.S.rel2.pstr.sd <- as(sample_data(Bac.seq.S.rel2.pstr), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.pstr) > 0, Bac.seq.S.rel2.pstr) #this removes any OTU with 0s
+Bac.seq.rel.pstr.sd <- as(sample_data(Bac.seq.rel.pstr), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
 
 Bac.phy.pstr <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
@@ -945,11 +911,11 @@ Bac.phy.cnat <- data.Bac.seq.rel %>%
    facet_wrap(~ code, ncol=1, scales = "free_x")
 
 #pstr
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2, species=="Pseudodiploria strigosa")
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2.pstr, time.point=="initial")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel.pstr, time.point=="initial")
 
-Bac.seq.S.rel2.pstr.sd <- as(sample_data(Bac.seq.S.rel2.pstr), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.pstr) > 0, Bac.seq.S.rel2.pstr) #this removes any OTU with 0s
+Bac.seq.rel.pstr.sd <- as(sample_data(Bac.seq.rel.pstr), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
 
 Bac.phy.pstr <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "family", NArm = FALSE) %>% 
@@ -971,9 +937,9 @@ Bac.phy.pstr <- data.Bac.seq.rel %>%
    facet_wrap(~ code, ncol=1, scales = "free_x")
 
 #dlab
-Bac.seq.S.rel2.dlab<-subset_samples(Bac.seq.S.rel2, species=="Diploria labyrinthiformis")
-Bac.seq.S.rel2.dlab.sd <- as(sample_data(Bac.seq.S.rel2.dlab), "data.frame") #look at samp data
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.S.rel2.dlab) > 0, Bac.seq.S.rel2.dlab) #this removes any OTU with 0s
+Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel, species=="Diploria labyrinthiformis")
+Bac.seq.rel.dlab.sd <- as(sample_data(Bac.seq.rel.dlab), "data.frame") #look at samp data
+data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.dlab) > 0, Bac.seq.rel.dlab) #this removes any OTU with 0s
 
 Bac.phy.dlab <- data.Bac.seq.rel %>% 
   tax_glom(taxrank = "Family", NArm = FALSE) %>% 
@@ -1003,7 +969,7 @@ Bac.phy.dlab <- data.Bac.seq.rel %>%
 
 #AH keep???
 ```{r}
-dat <- Bac.seq.S.rel2 %>% tax_glom(taxrank = "Phylum") %>% psmelt()
+dat <- Bac.seq.rel %>% tax_glom(taxrank = "Phylum") %>% psmelt()
 head(dat)
 
 dat$code<-paste(dat$treatment, dat$time.point)
@@ -1214,7 +1180,7 @@ cnat.core.taxa <- tax_table(cnat.core)
 View(as.data.frame(cnat.core.taxa))
 
 #cnat
-#cnat <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#cnat <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #cnat.ra <- transform_sample_counts(cnat, function(x) x/ sum(x))
 
 #cnat.core <- core(Bac.seq.cnat.f, detection = 0.0001, prevalence = .70)
@@ -1628,7 +1594,7 @@ dlab.core.taxa <- tax_table(dlab.core)
 View(as.data.frame(dlab.core.taxa))
 
 #dlab
-#dlab <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#dlab <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #dlab.ra <- transform_sample_counts(dlab, function(x) x/ sum(x))
 
 #dlab.core <- core(Bac.seq.dlab.f, detection = 0.0001, prevalence = .70)
@@ -1911,9 +1877,9 @@ ggsave("Figures/dlab_alpha.pdf", g)
 #P str.  
 Pseudodiploria strigosa
 ```{r}
-Bac.seq.S.rel2.pstr<-subset_samples(Bac.seq.S.rel2, species=="Pseudodiploria strigosa")
-Bac.seq.S.rel2.pstr = prune_taxa(taxa_sums(Bac.seq.S.rel2.pstr) > 0, Bac.seq.S.rel2.pstr) #this removes any OTU with 0s
-Bac.seq.pstr.f<-subset_samples(Bac.seq.S.rel2.pstr, time.point== "final")
+Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa")
+Bac.seq.rel.pstr = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
+Bac.seq.pstr.f<-subset_samples(Bac.seq.rel.pstr, time.point== "final")
 Bac.seq.pstr.f = prune_taxa(taxa_sums(Bac.seq.pstr.f) > 0, Bac.seq.pstr.f) #this removes any OTU with 0s
 
 Bac.seq.pstr.f.sd <- as(sample_data(Bac.seq.pstr.f), "data.frame") #look at samp data
@@ -2056,7 +2022,7 @@ pstr.core.taxa <- tax_table(pstr.core)
 View(as.data.frame(pstr.core.taxa))
 
 #pstr
-#pstr <- subset_samples(Bac.seq.S.rel2, species == "Colpophyllia natans")
+#pstr <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
 #pstr.ra <- transform_sample_counts(pstr, function(x) x/ sum(x))
 
 #pstr.core <- core(Bac.seq.pstr.f, detection = 0.0001, prevalence = .70)

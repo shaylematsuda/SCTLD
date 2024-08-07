@@ -46,7 +46,7 @@ library(parzer)#parzer package to deal with coordinates
 #Load in data and get into phyloseq (save RData file)
 ```{r}       
 #read in sample data and merge metadata
-metadata<-read.csv("SCTLD_metadata_20240515.csv") 
+metadata<-read.csv("SCTLD_metadata_20240806.csv") 
   metadata$species<-as.factor(as.character(metadata$species))
   metadata$time.point<-as.factor(as.character(metadata$time.point))
   metadata$treatment<-as.factor(as.character(metadata$treatment))
@@ -129,7 +129,7 @@ phy_tree(Bac.seq) <- treefile
 Bac.seq
 
 #Save before QC if needed
-#save(Bac.seq, file = "RData/Bac.seq.RData")
+save(Bac.seq, file = "RData/Bac.seq.RData")
 ```
 
 Code for QC:
@@ -161,7 +161,7 @@ ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
   facet_wrap(~experiment)
 
 richness(Bac.seq)
-plot_richness(Bac.seq, measures = c("Observed","Shannon"), color="type") 
+plot_richness(Bac.seq, measures = c("Observed","Shannon"), color="species") 
 evenness(Bac.seq)
 
 #NTC (all NTC subsampled out due to low reads)
@@ -189,12 +189,12 @@ JUST SCTLD
 ```{r}
 # look just at SCTLD samples
 Bac.seq.S.2<-subset_samples (Bac.seq, experiment=="SCTLD")
-Bac.seq.S.2<-subset_samples(Bac.seq.S.2, time.point!= "bath")
+#Bac.seq.S.2<-subset_samples(Bac.seq.S.2, time.point!= "bath")
 Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "NTC")
 Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "MOCK")
 Bac.seq.S.2<-subset_samples(Bac.seq.S.2, experiment!= "FLU")
-Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Orbicella faveolata")
-Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Montastrea cavernosa")
+#Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Orbicella faveolata")
+#Bac.seq.S.2<-subset_samples(Bac.seq.S.2, species!= "Montastrea cavernosa")
 Bac.seq.S.2.sd <- as(sample_data(Bac.seq.S.2), "data.frame") #look at samp data
 
 sample.data <- as(sample_data(Bac.seq.S.2), "data.frame") #create sample data frame to view
@@ -205,7 +205,7 @@ ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = time.point)) +
   geom_point()+
   facet_wrap(~species)
 
-#Check all samples same subset: Cut at 6740 seqs/samp
+#Check all samples same subset: Cut at 6740 seqs/samp in subset bioinformatics (<5000cut)
 ggplot(data = sample.data, aes(x=Index, y=LibrarySize, color = experiment)) +
   geom_point()+
   facet_wrap(~experiment)
