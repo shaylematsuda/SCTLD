@@ -40,6 +40,7 @@ library(geosphere)
 library(ade4)
 library(microbiome)  
 library(knitr)
+library(tidyverse)
 ```
 
 #Start analysis here: load in RData if needed
@@ -47,18 +48,27 @@ library(knitr)
 load("RData/Bac.seq.SCTLD.RData") #load cleaned data 
 
 sampdata <- as(sample_data(Bac.seq.S.2), "data.frame") #look at samp data
+
 ```
 
 #Set up, Bac.s relative abundaces: Bac.seq.rel (Bac.seq for alpha)
 ```{r}        
-#make relative abundance df Bac.seq
-Bac.seq.rel  = transform_sample_counts(Bac.seq.S.2, function(x) x / sum(x) )  #save as RELA DIVs
+
+#save copy that includes the bath and parents
+Bac.seq.rel.bath  = transform_sample_counts(Bac.seq.S.2, function(x) x / sum(x) )  #save as RELA DIVs
+Bac.seq.rel.bath.sd <- as(sample_data(Bac.seq.rel.bath), "data.frame") #look at samp data
+Bac.seq.rel.bath = prune_taxa(taxa_sums(Bac.seq.rel.bath) > 0, Bac.seq.rel.bath) #this removes any OTU with 0s
+
+#make relative abundance df Bac.seq only samples (no bath or parents)
+Bac.seq.rel<-subset_samples(Bac.seq.S.2, time.point!= "bath")
+Bac.seq.rel<-subset_samples(Bac.seq.rel, time.point!= "parent")
+Bac.seq.rel  = transform_sample_counts(Bac.seq.rel, function(x) x / sum(x) )  #save as RELA DIVs
 data.Bac.seq.rel.sd <- as(sample_data(Bac.seq.rel), "data.frame") #look at samp data
 data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel) > 0, Bac.seq.rel) #this removes any OTU with 0s
 ``` 
 
-
-Unifrac
+#nmds entire experiment
+Unifrac - All species together, all time points, all treatments (Don't need)
 ```{r}
 #make unifrac matrix
 Bac.seq.wu.all <- phyloseq::distance(Bac.seq.rel, method = "wunifrac")
@@ -69,9 +79,6 @@ s.u.samp.df$code<-paste(s.u.samp.df$treatment,s.u.samp.df$time.point) #treatment
 set.seed(30)
 adonis2(Bac.seq.wu.all ~ species, data = s.u.samp.df)
 
-# Pairwise comparisons using pairwise.adonis2 between species pairs: all sig diff
-pairwise_results <- pairwise.adonis2(Bac.seq.wu.all ~ species, data = s.u.samp.df)
-print(pairwise_results)
 
 #adonixs test between species*treatment*time.point: all sig
 set.seed(30)
@@ -92,61 +99,299 @@ scores.ord.u_RelA_stats$species <- unifrac.all.sd$species
 scores.ord.u_RelA_stats$treatment <- unifrac.all.sd$treatment
 scores.ord.u_RelA_stats$time.point <- unifrac.all.sd$time.point
 scores.ord.u_RelA_stats$code<-paste(scores.ord.u_RelA_stats$treatment, scores.ord.u_RelA_stats$time.point)
-scores.ord.u_RelA_stats$code <- factor(scores.ord.u_RelA_stats$code, levels = c("control initial", "control final", "disease final"))
+#scores.ord.u_RelA_stats$code <- factor(scores.ord.u_RelA_stats$code, levels = c("control initial", "control final", "disease initial","disease final"))
 
 #plot 
 p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) + 
   geom_point(aes(colour = code, shape=time.point), size = 4) +
-  scale_color_manual(values = c("gray", "darkblue", "red")) +
+  scale_color_manual(values = c("darkblue","gray",  "red","gray")) +
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = code), linetype = 2) +
-  ggtitle("NMDS 16s by sample type") +
+  ggtitle("Microbial communities in three juvenile corals - NMDS") +
   theme_classic()+
   facet_wrap(~species);p
-ggsave(filename = "Figures/nmds_16s_all.pdf", plot = p, width = 12, height = 6, units = "in")
+ggsave(filename = "Figures/nmds_16s_all.jpg", plot = p, width = 12, height = 6, units = "in")
 
 ```
 
-#Initial only - differences between species
+#nmds diseaes bath
 ```{r}
-Bac.seq.S.rel.initial<-subset_samples (Bac.seq.rel, time.point=="initial")
-Bac.seq.S.rel.initial = prune_taxa(taxa_sums(Bac.seq.S.rel.initial) > 0, Bac.seq.S.rel.initial) 
-#make unifrac matrix
-Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.S.rel.initial, method = "wunifrac")
-s.u.samp.df.ini <- as(sample_data(Bac.seq.S.rel.initial), "data.frame") #sample df
-
-  
-#adonixs test between sample types: p=0.001 between species types
-set.seed(30)
-adonis_results<-adonis2(Bac.seq.wu.ini ~ species, data = s.u.samp.df.ini)
-# Pairwise comparisons using pairwise.adonis2
-pairwise_results <- pairwise.adonis2(Bac.seq.wu.ini ~ species, data = s.u.samp.df.ini)
-print(pairwise_results)
-
-# Homogeneity of dispersion test
-set.seed(30)
-betadisper_result <- betadisper(Bac.seq.wu.ini, s.u.samp.df.ini$species, type = "centroid")
-permutest_result <- permutest(betadisper_result)
-
-# Tukey's Honest Significant Difference test
-tukey_result <- TukeyHSD(betadisper_result, ordered = FALSE, conf.level = 0.95)
-
 #plot
+Bac.seq.rel.bath2<-subset_samples(Bac.seq.rel.bath, time.point!="parent")
 #nmds
-unifrac.ini <- ordinate(Bac.seq.S.rel.initial, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
-stressplot(unifrac.ini)
-print(unifrac.ini)# stress score 0.117
-scores.ord.u_RelA_stats<-as.data.frame(cbind(vegan::scores(unifrac.ini, display="sites")))  
-     unifrac.ini.sd <- as(sample_data(Bac.seq.S.rel.initial), "data.frame") #sample df
+unifrac.bath <- ordinate(Bac.seq.rel.bath2, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
+     unifrac.bath.sd <- as(sample_data(Bac.seq.rel.bath2), "data.frame") #sample df
+stressplot(unifrac.bath)
+print(unifrac.bath)# stress score 0.117
+scores.ord.u_RelA_stats<-as.data.frame(cbind(vegan::scores(unifrac.bath, display="sites")))  
 
-scores.ord.u_RelA_stats$species <- unifrac.ini.sd$species
+scores.ord.u_RelA_stats$species <- unifrac.bath.sd$species
+scores.ord.u_RelA_stats$treatment <- unifrac.bath.sd$treatment
+scores.ord.u_RelA_stats$time.point <- unifrac.bath.sd$time.point
 
-p<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) + 
-  geom_point(aes(colour = species), size = 4) +
-    scale_color_manual(values=c("orange","turquoise3","seagreen"))+
-  stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = species), linetype = 2) +
-  ggtitle("Microbiome NMDS") +
-  theme_classic();p
-ggsave("Figures/initial_NMDS.pdf", plot = p, width = 8, height = 6)
+
+x<-ggplot(scores.ord.u_RelA_stats, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(aes(colour = time.point, shape=species), size = 4) +
+    #scale_color_manual(values=c("orange","turquoise3","seagreen","black","red"))+
+ # stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = species), linetype = 2) +
+  ggtitle("Microbiobial Community including bath NMDS") +
+   scale_color_manual(values = c("darkblue","gray",  "gray")) +
+  theme_classic()+
+    theme(legend.text = element_text(face = "italic"),legend.title = element_blank());x
+#x<-x+facet_wrap(~time.point);x
+ggsave("Figures/bath_NMDS.jpg", plot = x, width = 8, height = 6)
+
+
+```
+Stacked bar plots - initial 3 species
+```{r}
+# make a stacked bar plot at phylum and fam level by species ####
+
+#family####
+Bac.fam.all <- Bac.seq.S.rel.initial %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.all <- psmelt(Bac.fam.all)
+  
+  Bac.fam.avg <- Bac.fam.melt.all %>%
+  group_by(species, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(species) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  a<-ggplot(Bac.fam.prop, aes(x = species, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+  ggtitle("Proportional Microbiome Family Abundance by Coral Species");a  # Add plot title
+  ggsave("Figures/initial_bar_species.jpg", plot = a, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.all <- psmelt(Bac.fam.all)
+  
+  Bac.fam.avg <- Bac.fam.melt.all %>%
+  group_by(species, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(species) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.fam.prop %>%
+  group_by(species) %>%
+  arrange(species, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(species, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop <- Bac.fam.prop %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla$Family & species %in% top_10_phyla$species, Family, "Other"))
+
+# 7. Plot the data with custom colors
+b<-ggplot(Bac.fam.prop, aes(x = species, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"]))), unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Family Abundance by Coral Species");b  # Add plot title
+  ggsave("Figures/initial_bar_species_famTOP10.jpg", plot = b, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10<-subset(Bac.fam.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+c<-ggplot(Bac.fam.prop.Top10, aes(x = species, y = Prop_Abundance, fill = species)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("orange","turquoise3","seagreen"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Family Abundance by Coral Species")+
+  facet_wrap(~Family);c  # Add plot title
+  ggsave("Figures/initial_bar_species_famTOP10_FACET.jpg", plot = c, width = 18, height = 8)
+  
+  
+  
+  
+#phylum####
+Bac.phy.all <- Bac.seq.S.rel.initial %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.all <- psmelt(Bac.phy.all)
+  
+  Bac.phy.avg <- Bac.phy.melt.all %>%
+  group_by(species, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(species) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  a<-ggplot(Bac.phy.prop, aes(x = species, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+  ggtitle("Proportional Microbiome Phylum Abundance by Coral Species");a  # Add plot title
+  ggsave("Figures/initial_bar_species.phylum_all.jpg", plot = a, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.all <- psmelt(Bac.phy.all)
+  
+  Bac.phy.avg <- Bac.phy.melt.all %>%
+  group_by(species, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(species) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.phy.prop %>%
+  group_by(species) %>%
+  arrange(species, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(species, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop <- Bac.phy.prop %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla$Phylum & species %in% top_10_phyla$species, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+d<-ggplot(Bac.phy.prop, aes(x = species, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"]))), unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Phylum Abundance by Coral Species");d  # Add plot title
+  ggsave("Figures/initial_bar_species_phyTOP10.jpg", plot = d, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10<-subset(Bac.phy.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+e<-ggplot(Bac.phy.prop.Top10, aes(x = species, y = Prop_Abundance, fill = species)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("orange","turquoise3","seagreen"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Top 10 Phylum Abundance by Coral Species")+
+  facet_wrap(~Phylum);e  # Add plot title
+  ggsave("Figures/initial_bar_species_phyTOP10_FACET.jpg", plot = e, width = 8, height = 6)
+```
+
+
+  # DELETE if you get above to work
+```{r}
+#bar plot one bar per speces
+  
+#phy
+Bac.phy.ini <- Bac.seq.S.rel.initial %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+Bac.phy.ini.melt <- psmelt(Bac.phy.ini)
+
+nb.cols <- 
+mycolors <- colorRampPalette(brewer.pal(11, "RdYlBu"))(nb.cols)
+library(qualpalr)
+
+pal = qualpal(48, colorspace=list(h=c(13,350), s=c(0.3,1), l=c(0.2,0.8)))
+
+# Generate a palette with 50 unique and different colors
+library(colorspace)
+palette <- diverging_hcl(50)
+
+library(viridis)
+
+# Generate a palette with 50 unique and easily distinguishable colors
+palette <- viridis_pal(option = "C")(50)
+
+
+#plot all (impossible to see)
+p<-ggplot(Bac.phy.ini.melt, aes(x = sample_name, y = Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity") +
+  #scale_fill_manual(values=pal) +
+          scale_color_manual(values=pal$hex)+
+  ylab("Relative Abundance") +
+  xlab("location") +
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+p %>%
+  plot_composition(average_by = "species")+ scale_y_continuous(labels = percent)
+
+#how many phyla in the initial dataset
+tax_table <- tax_table(Bac.seq.S.rel.initial)
+tax_df <- as.data.frame(tax_table)
+head(tax_df)
+unique_phyla_count <- tax_df %>%
+  pull(Phylum) %>%      # Extract the Phylum column
+  unique() %>%          # Get unique phyla
+  length()              # Count the number of unique phyla
+print(unique_phyla_count)
+
+#working from code internet 8/8 https://rpubs.com/mohsen/phyloseq_analysis_family
+
+####This is not working right. it isn't grouping by Phylum just making a new number
+
+
+library(microbiome)
+library(scales)
+
+phy2 <- Bac.seq.S.rel.initial %>% aggregate_taxa(level = "Phylum") 
+phy2
+
+phy2 %>%  plot_composition(average_by = "species")+ scale_y_continuous(labels = percent)
+
 
 
 #TOP OTUS not just top taxa  ####
@@ -211,32 +456,8 @@ C.nat Initial only
 ```{r}
 #cnat
 Bac.seq.rel.cnat<-subset_samples(Bac.seq.rel, species=="Colpophyllia natans")
-data.Bac.seq.rel = prune_taxa(taxa_sums(Bac.seq.rel.cnat) > 0, Bac.seq.rel.cnat) #this removes any OTU with 0s
 Bac.seq.rel.cnat<-subset_samples(Bac.seq.rel.cnat, time.point=="initial")
-
-# Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.rel.cnat)
-
-# Count the number of non-zero counts for each taxa across all samples
-taxa_presence <- rowSums(otu_table > 0) 
-num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count the number of taxa present in all samples
-print(num_taxa_present_in_all_samples)# Print the result - it's zero
-
-# Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.rel.cnat, detection = 1/100)
-tax_table <- tax_table(Bac.seq.rel.cnat)
-
-# Filter taxa with prevalence greater than 1%
-taxa_greater_than_80_percent <- taxa_prevalence[taxa_prevalence > 0.80]
-taxa_names_greater_than_80_percent <- tax_table[taxa_greater_than_80_percent,]
-
-# Count the number of taxa
-num_taxa_greater_than_80_percent <- length(taxa_names_greater_than_80_percent)
-
-# Print the result
-print(length(taxa_greater_than_80_percent))
-print(taxa_names_greater_than_80_percent)
-
+data.Bac.seq.rel.cnat = prune_taxa(taxa_sums(Bac.seq.rel.cnat) > 0, Bac.seq.rel.cnat) #this removes any OTU with 0s
 
 # Count unique taxa
 taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.cnat))
@@ -244,9 +465,32 @@ unique_species <- n_distinct(taxa_levels$Species)
 unique_genera <- n_distinct(taxa_levels$Genus)
 unique_families <- n_distinct(taxa_levels$Family)
 
-print(unique_species)
 print(unique_genera)
 print(unique_families)
+
+# #try this
+# unique_genera_count <- Bac.seq.rel.cnat %>%
+#   tax_table() %>%
+#   as.data.frame() %>%
+#   dplyr::pull(Genus) %>%
+#   unique() %>%
+#   length()
+# 
+# # Print the result
+# print(unique_genera_count)
+# 
+# unique_fam_count <- Bac.seq.rel.cnat %>%
+#   tax_table() %>%
+#   as.data.frame() %>%
+#   dplyr::pull(Family) %>%
+#   unique() %>%
+#   length()
+# 
+# # Print the result
+# print(unique_fam_count)
+# 
+
+
 
 # Extract OTU names
 otu_names <- taxa_names(Bac.seq.rel.cnat)
@@ -265,92 +509,8 @@ print(unique_otus)
 core.taxa.standard <- core_members(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .95)
 core.taxa.standard
 
-#Try again with genus level
-cnat.rel.gen <- aggregate_taxa(Bac.seq.rel.cnat, "Family")
-prevalences <- seq(.05, 1, .05)
-detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
-par(cex = 0.2)  # Adjust the value (0.8) to make the text smaller
 
-p1 <- plot_core(cnat.rel.gen, 
-                plot.type = "heatmap", 
-                colours = rev(brewer.pal(5, "RdBu")),
-                prevalences = prevalences,
-                
-                detections = detections, min.prevalence = .95) +
-    xlab("Detection Threshold (Relative Abundance (%))")
-p1 <- p1 + theme_bw() + ylab("ASVs")
-p1
-
-cnat.genus <- aggregate_taxa(Bac.seq.rel.cnat, "Genus")
-prevalences <- seq(.05, 1, .05)
-detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
-
-p1 <- plot_core(cnat.genus, 
-                plot.type = "heatmap", 
-                colours = rev(brewer.pal(5, "RdBu")),
-                prevalences = prevalences, 
-                detections = detections, min.prevalence = .5) +
-    xlab("Detection Threshold (Relative Abundance (%))")
-p1 <- p1 + theme_bw() + ylab("ASVs")
-p1
-
-#bar plot
-#family
-Bac.fam.cnat <- Bac.seq.rel.cnat %>% 
-  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
-  transform_sample_counts(function(x) {x/sum(x)} ) 
-  Bac.fam.melt.cnat <- psmelt(Bac.fam.cnat)
-
-
-  ggplot(Bac.fam.melt.cnat, aes(x = sample_name, y = Abundance, fill = Family)) +
-  geom_bar(stat = "identity") +
-  #scale_fill_manual(values=pal) +
-  #scale_color_manual(values=pal$hex)+
-  #scale_fill_manual(values = palette) +  # Use scale_fill_manual() for filling bars
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("C. natans Family")   # Add plot title here
-  
-  #bar plot
-  
-#phy
-Bac.phy.cnat <- Bac.seq.rel.cnat %>% 
-  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
-  transform_sample_counts(function(x) {x/sum(x)} ) 
-  Bac.phy.melt.cnat <- psmelt(Bac.phy.cnat)
-
-  ggplot(Bac.phy.melt.cnat, aes(x = sample_name, y = Abundance, fill = Phylum)) +
-  geom_bar(stat = "identity") +
-  #scale_fill_manual(values=pal) +
-  #scale_color_manual(values=pal$hex)+
-  #scale_fill_manual(values = palette) +  # Use scale_fill_manual() for filling bars
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  #theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("C. natans Phylum")   # Add plot title here
-  
-### HE from ACE
-  
-  ##Core Analysis
-  cnat.core <- core(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .99)
-cnat.core.taxa <- tax_table(cnat.core)
-View(as.data.frame(cnat.core.taxa))
-
-
-#Trial with a tax glom at family??
-t0.fam <- tax_glom(Bac.seq.rel, "Family", NArm = TRUE)
-t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
-t0.fam.core.taxa <- tax_table(t0.fam.core)
-View(as.data.frame(t0.fam.core.taxa))
-
-#cnat
-#cnat <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
-#cnat.ra <- transform_sample_counts(cnat, function(x) x/ sum(x))
-
-cnat.core <- core(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .97)
+cnat.core <- core(Bac.seq.rel.cnat, detection = 0.0001, prevalence = .95)
 cnat.core.taxa <- tax_table(cnat.core)
 View(as.data.frame(cnat.core.taxa))
 cnat.core.melt <- psmelt(cnat.core)
@@ -364,9 +524,10 @@ p.cnat <- ggplot(cnat.core.melt, aes(x = Sample, y = Genus, size = Abundance)) +
   scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9 )) +
   coord_fixed(ratio = 0.9) +
   scale_color_manual(values=c("dodgerblue4", "darkorange2","indianred3")) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1));p.cnat
+ # theme(axis.text.x = element_text(angle = 90, hjust = 1))
+theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), aspect.ratio=.7);p.cnat
 print(p.cnat)
-ggsave("Figures/cnat_core_bubble.pdf")
+  ggsave("Figures/cnat_core_bubble.jpg", plot = p.cnat, width = 8, height = 4)
 
 ```
 
@@ -374,33 +535,8 @@ D. lab overview
 ```{r}
 #dlab
 Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel, species=="Diploria labyrinthiformis")
-data.Bac.seq.rel.dlab = prune_taxa(taxa_sums(Bac.seq.rel.dlab) > 0, Bac.seq.rel.dlab) #this removes any OTU with 0s
 Bac.seq.rel.dlab<-subset_samples(Bac.seq.rel.dlab, time.point=="initial")
-
-# Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.rel.dlab)
-
-# Count the number of non-zero counts for each taxa across all samples
-taxa_presence <- rowSums(otu_table > 0) 
-num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count the number of taxa present in all samples
-print(num_taxa_present_in_all_samples)# Print the result - it's zero
-
-# Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.rel.dlab, detection = 1/100)
-tax_table <- tax_table(Bac.seq.rel.dlab)
-
-
-# Filter taxa with prevalence greater than 1%
-taxa_greater_than_80_percent <- taxa_prevalence[taxa_prevalence > 0.990]
-taxa_names_greater_than_80_percent <- tax_table[taxa_greater_than_80_percent,]
-
-# Count the number of taxa
-num_taxa_greater_than_80_percent <- length(taxa_names_greater_than_80_percent)
-
-# Print the result
-print(length(taxa_greater_than_80_percent))
-print(taxa_names_greater_than_80_percent)
-
+data.Bac.seq.rel.dlab = prune_taxa(taxa_sums(Bac.seq.rel.dlab) > 0, Bac.seq.rel.dlab) #this removes any OTU with 0s
 
 # Count unique taxa
 taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.dlab))
@@ -429,92 +565,8 @@ print(unique_otus)
 core.taxa.standard <- core_members(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .95)
 core.taxa.standard
 
-#Try again with genus level (lots of unclassified, so at family)
-dlab.rel.gen <- aggregate_taxa(Bac.seq.rel.dlab, "Family")
-prevalences <- seq(.05, 1, .05)
-detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
-par(cex = 0.2)  # Adjust the value (0.8) to make the text smaller
 
-p1 <- plot_core(dlab.rel.gen, 
-                plot.type = "heatmap", 
-                colours = rev(brewer.pal(5, "RdBu")),
-                prevalences = prevalences,
-                
-                detections = detections, min.prevalence = .90) +
-    xlab("Detection Threshold (Relative Abundance (%))")
-p1 <- p1 + theme_bw() + ylab("ASVs")
-p1
-
-dlab.genus <- aggregate_taxa(Bac.seq.rel.dlab, "Genus")
-prevalences <- seq(.05, 1, .05)
-detections <- round(10^seq(log10(1e-5), log10(.2), length = 10), 3)
-
-p1 <- plot_core(dlab.genus, 
-                plot.type = "heatmap", 
-                colours = rev(brewer.pal(5, "RdBu")),
-                prevalences = prevalences, 
-                detections = detections, min.prevalence = .5) +
-    xlab("Detection Threshold (Relative Abundance (%))")
-p1 <- p1 + theme_bw() + ylab("ASVs")
-p1
-
-#bar plot
-#family
-Bac.fam.dlab <- Bac.seq.rel.dlab %>% 
-  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
-  transform_sample_counts(function(x) {x/sum(x)} ) 
-  Bac.fam.melt.dlab <- psmelt(Bac.fam.dlab)
-
-
-  ggplot(Bac.fam.melt.dlab, aes(x = sample_name, y = Abundance, fill = Family)) +
-  geom_bar(stat = "identity") +
-  #scale_fill_manual(values=pal) +
-  #scale_color_manual(values=pal$hex)+
-  #scale_fill_manual(values = palette) +  # Use scale_fill_manual() for filling bars
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("C. natans Family")   # Add plot title here
-  
-  #bar plot
-#phy
-Bac.phy.dlab <- Bac.seq.rel.dlab %>% 
-  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
-  transform_sample_counts(function(x) {x/sum(x)} ) 
-  Bac.phy.melt.dlab <- psmelt(Bac.phy.dlab)
-
-  ggplot(Bac.phy.melt.dlab, aes(x = sample_name, y = Abundance, fill = Phylum)) +
-  geom_bar(stat = "identity") +
-  #scale_fill_manual(values=pal) +
-  #scale_color_manual(values=pal$hex)+
-  #scale_fill_manual(values = palette) +  # Use scale_fill_manual() for filling bars
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  #theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-    ggtitle("D.lab Phylum")   # Add plot title here
-  
-  
-  ### HE from ACE
-  
-  ##Core Analysis
-dlab.core <- core(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .99)
-dlab.core.taxa <- tax_table(dlab.core)
-View(as.data.frame(dlab.core.taxa))
-
-
-#Trial with a tax glom at family??
-t0.fam <- tax_glom(Bac.seq.rel, "Family", NArm = TRUE)
-t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
-t0.fam.core.taxa <- tax_table(t0.fam.core)
-View(as.data.frame(t0.fam.core.taxa))
-
-#dlab
-#dlab <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
-#dlab.ra <- transform_sample_counts(dlab, function(x) x/ sum(x))
-
-dlab.core <- core(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .97)
+dlab.core <- core(Bac.seq.rel.dlab, detection = 0.0001, prevalence = .95)
 dlab.core.taxa <- tax_table(dlab.core)
 View(as.data.frame(dlab.core.taxa))
 dlab.core.melt <- psmelt(dlab.core)
@@ -528,10 +580,11 @@ p.dlab <- ggplot(dlab.core.melt, aes(x = Sample, y = Genus, size = Abundance)) +
   scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9 )) +
   coord_fixed(ratio = 0.9) +
   scale_color_manual(values=c("dodgerblue4", "darkorange2","indianred3")) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1));p.dlab
+ # theme(axis.text.x = element_text(angle = 90, hjust = 1))
+theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), aspect.ratio=.3);p.dlab
 print(p.dlab)
-ggsave("Figures/dlab_core_bubble.pdf")
-
+  ggsave("Figures/dlab_core_bubble.jpg", plot = p.dlab, width = 8, height = 4)
+  
 ```
 Pstr overview
 ```{r}
@@ -540,31 +593,6 @@ Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel, species=="Pseudodiploria strigosa"
 Bac.seq.rel.pstr<-subset_samples(Bac.seq.rel.pstr, time.point=="initial")
 
 data.Bac.seq.rel.pstr = prune_taxa(taxa_sums(Bac.seq.rel.pstr) > 0, Bac.seq.rel.pstr) #this removes any OTU with 0s
-
-# Access the OTU table from your phyloseq object
-otu_table <- otu_table(Bac.seq.rel.pstr)
-
-# Count the number of non-zero counts for each taxa across all samples
-taxa_presence <- rowSums(otu_table > 0) 
-num_taxa_present_in_all_samples <- sum(taxa_presence == ncol(otu_table))# Count the number of taxa present in all samples
-print(num_taxa_present_in_all_samples)# Print the result - it's zero
-
-# Calculate prevalence of taxa
-taxa_prevalence <- prevalence(Bac.seq.rel.pstr, detection = 1/100)
-tax_table <- tax_table(Bac.seq.rel.pstr)
-
-
-# Filter taxa with prevalence greater than 1%
-taxa_greater_than_80_percent <- taxa_prevalence[taxa_prevalence > 0.990]
-taxa_names_greater_than_80_percent <- tax_table[taxa_greater_than_80_percent,]
-
-# Count the number of taxa
-num_taxa_greater_than_80_percent <- length(taxa_names_greater_than_80_percent)
-
-# Print the result
-print(length(taxa_greater_than_80_percent))
-print(taxa_names_greater_than_80_percent)
-
 
 # Count unique taxa
 taxa_levels <- as.data.frame(tax_table(Bac.seq.rel.pstr))
@@ -590,9 +618,218 @@ otu_table <- otu_table(Bac.seq.rel.pstr)
 unique_otus <- sum(otu_table > 0, na.rm = TRUE)
 print(unique_otus)
 
-core.taxa.standard <- core_members(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .99)
+
+#USE THIS FOR CORE found at 0.001 rel abund in 90+% samps
+core.taxa.standard <- core_members(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .95)
 core.taxa.standard
 
+#pstr
+#pstr <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
+#pstr.ra <- transform_sample_counts(pstr, function(x) x/ sum(x))
+
+pstr.core <- core(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .95)
+pstr.core.taxa <- tax_table(pstr.core)
+View(as.data.frame(pstr.core.taxa))
+pstr.core.melt <- psmelt(pstr.core)
+pstr.core.melt$top.group <- "core"
+write.csv(pstr.core.melt, "stats/pstr_core.csv")
+
+##Plotting
+#check # of OTUs
+p.pstr <- ggplot(pstr.core.melt, aes(x = Sample, y = Genus, size = Abundance)) +
+  geom_point() +
+  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9 )) +
+  coord_fixed(ratio = 0.9) +
+  scale_color_manual(values=c("dodgerblue4", "darkorange2","indianred3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ggtitle("Taxa present in 95% of samples (threshold 0.001)");p.pstr
+print(p.pstr)
+  ggsave("Figures/pstr_core_bubble.jpg", plot = p.pstr, width = 8, height = 4)
+
+
+```
+
+
+#initial only alpha
+```{r}
+Bac.seq.S.raw<- Bac.seq.S.2
+Bac.seq.S.raw.ini<- Bac.seq.S.raw
+
+Bac.seq.raw.ini<-subset_samples(Bac.seq.S.raw.ini, time.point=="initial")
+
+Bac.seq.raw.ini = prune_taxa(taxa_sums(Bac.seq.raw.ini) > 0, Bac.seq.raw.ini) 
+Bac.seq.raw.ini.sd <- as(sample_data(Bac.seq.raw.ini), "data.frame") #sample df
+
+#make unifrac matrix
+Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.raw.ini, method = "wunifrac")
+s.u.samp.df.ini <- as(sample_data(Bac.seq.raw.ini), "data.frame") #sample df
+s.u.samp.df.ini$species<-as.factor(s.u.samp.df.ini$species)
+  
+# pull out: observed, diversity_shannon, evenness_pielou
+erich.tab.obs <-microbiome::alpha(Bac.seq.raw.ini, index = "observed") 
+  erich.tab.obs$sample_name <- as.factor(Bac.seq.raw.ini.sd$sample_name)
+    erich.tab.obs$species <- as.factor(Bac.seq.raw.ini.sd$species)
+
+erich.tab.shan <-microbiome::alpha(Bac.seq.raw.ini, index = "diversity_shannon")
+    erich.tab.shan$sample_name <- as.factor(Bac.seq.raw.ini.sd$sample_name)
+        erich.tab.shan$species <- as.factor(Bac.seq.raw.ini.sd$species)
+
+erich.tab.even <-microbiome::alpha(Bac.seq.raw.ini, index = "evenness_pielou")
+    erich.tab.even$sample_name <- as.factor(Bac.seq.raw.ini.sd$sample_name)
+        erich.tab.shan$treatment <- as.factor(Bac.seq.raw.ini.sd$treatment)
+                erich.tab.shan$time.point <- as.factor(Bac.seq.raw.ini.sd$time.point)
+
+
+alpha<-merge(erich.tab.obs, erich.tab.even, by.all="sample_name")
+alpha<-merge(alpha, erich.tab.shan, by="sample_name")
+#write.csv(erich.tab.obs, "erich.tab.obs.csv")
+#add meta
+#alpha<-merge(alpha, Bac.seq.raw.ini.sd, by.x="sample_name")
+
+#shannon ####
+  hist(alpha$diversity_shannon)
+  set.seed(30)
+  aov.shannon = aov(diversity_shannon ~ species.x, data=alpha)
+    summary(aov.shannon) 
+    TukeyHSD(aov.shannon)
+
+    
+#means
+shannon_mean <- ddply(alpha, c("species.x"), summarise, #summarize cell counts
+                 N    = length(diversity_shannon[!is.na(diversity_shannon)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(diversity_shannon, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(diversity_shannon, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(diversity_shannon, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);shannon_mean
+
+#set colors
+custom_colors <- c("Colpophyllia natans" = "orange", "Diploria labyrinthiformis" = "turquoise3","Pseudodiploria strigosa"="seagreen")  
+custom_labels <- c("Colpophyllia natans", "Diploria labyrinthiformis","Pseudodiploria strigosa")  # Replace with your actual labels
+
+ 
+shannon_plot <- ggplot(data=shannon_mean, aes(x=species.x, y=mean, color=species.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = F) + # Remove legend for error bars
+  geom_point(aes(color=species.x), size=4, show.legend = F) + # Remove legend for points
+  xlab("") + #Label the X Axis
+  ylab("") + #Label the Y Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), #Set the axes color
+        axis.title=element_text(size=14,face="bold"), #Set axis format
+        panel.border = element_blank(), #Set the border
+        panel.grid.major = element_blank(), #Set the major gridlines
+        panel.grid.minor = element_blank(), #Set the minor gridlines
+        text = element_text(size=18),  # set element text
+        plot.background =element_blank(), #Set the plot background
+        legend.position = "none", # Remove the legend completely
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, face = "italic"), # Make x-axis labels italic
+        plot.title = element_text(size=20, face = "italic")) + # Italicize plot title
+  ylab(expression(paste("Shannon Diversity"))) +
+  scale_color_manual(values = custom_colors) + # Apply custom colors
+  scale_x_discrete(labels = custom_labels) +
+  ggtitle(expression(italic("Shannon Diversity") ));shannon_plot
+ggsave("Figures/initial_shannon.pdf", shannon_plot)
+
+#Richness ####
+  hist(alpha$observed)
+  set.seed(30)
+  aov.observed = aov(observed ~ species.x, data=alpha)
+    summary(aov.observed)  
+        TukeyHSD(aov.observed)
+
+#means
+observed_mean <- ddply(alpha, c("species.x"), summarise, #summarize cell counts
+                 N    = length(observed[!is.na(observed)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(observed, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(observed, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(observed, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);observed_mean
+
+
+observed_plot <- ggplot(data=observed_mean, aes(x=species.x, y=mean, color=species.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = F) + # Remove legend for error bars
+  geom_point(aes(color=species.x), size=4, show.legend = F) + # Remove legend for points
+  xlab("") + #Label the X Axis
+  ylab("") + #Label the Y Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), #Set the axes color
+        axis.title=element_text(size=14,face="bold"), #Set axis format
+        panel.border = element_blank(), #Set the border
+        panel.grid.major = element_blank(), #Set the major gridlines
+        panel.grid.minor = element_blank(), #Set the minor gridlines
+        text = element_text(size=18),  # set element text
+        plot.background =element_blank(), #Set the plot background
+        legend.position = "none", # Remove the legend completely
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, face = "italic"), # Make x-axis labels italic
+        plot.title = element_text(size=20, face = "italic")) + # Italicize plot title
+  ylab(expression(paste("Richness"))) +
+  scale_color_manual(values = custom_colors) + # Apply custom colors
+  scale_x_discrete(labels = custom_labels) +
+  ggtitle(expression(italic("Richness") ));observed_plot
+ggsave("Figures/initial_richness.pdf", observed_plot)
+
+
+#evenness ####
+  hist(alpha$evenness_pielou)
+  set.seed(30)
+  aov.evenness = aov(evenness_pielou ~ species.x, data=alpha)
+    summary(aov.evenness) 
+            TukeyHSD(aov.evenness)
+
+#means
+evenness_mean <- ddply(alpha, c("species.x"), summarise, #summarize cell counts
+                 N    = length(evenness_pielou[!is.na(evenness_pielou)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(evenness_pielou, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(evenness_pielou, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(evenness_pielou, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);evenness_mean
+
+even_plot <- ggplot(data=evenness_mean, aes(x=species.x, y=mean, color=species.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = F) + # Remove legend for error bars
+  geom_point(aes(color=species.x), size=4, show.legend = F) + # Remove legend for points
+  xlab("") + #Label the X Axis
+  ylab("") + #Label the Y Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), #Set the axes color
+        axis.title=element_text(size=14,face="bold"), #Set axis format
+        panel.border = element_blank(), #Set the border
+        panel.grid.major = element_blank(), #Set the major gridlines
+        panel.grid.minor = element_blank(), #Set the minor gridlines
+        text = element_text(size=18),  # set element text
+        plot.background =element_blank(), #Set the plot background
+        legend.position = "none", # Remove the legend completely
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, face = "italic"), # Make x-axis labels italic
+        plot.title = element_text(size=20, face = "italic")) + # Italicize plot title
+  ylab(expression(paste("Evenness"))) +
+  scale_color_manual(values = custom_colors) + # Apply custom colors
+  scale_x_discrete(labels = custom_labels) +
+  ggtitle(expression(italic("Evenness") ));even_plot
+  
+ggsave("Figures/ini_even.pdf", even_plot)
+
+library(grid)
+
+g<-grid.arrange(observed_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
+            # widths = c(1, 1, 1),  # Adjust widths as needed
+            # heights = c(3),       # Adjust heights as needed
+           #  asp = 1)              # Set aspect ratio
+  ggsave("Figures/initial_alpha.jpg", plot = g, width = 10, height = 5)
+
+
+
+```
+
+
+
+
+
+#DO NOT NEED
+```{r)}
 #Try again with genus level (lots of unclassified, so at family)
 pstr.rel.gen <- aggregate_taxa(Bac.seq.rel.pstr, "Family")
 prevalences <- seq(.05, 1, .05)
@@ -676,32 +913,11 @@ t0.fam.core <- core(t0.fam, detection = 0.0001, prevalence = .99)
 t0.fam.core.taxa <- tax_table(t0.fam.core)
 View(as.data.frame(t0.fam.core.taxa))
 
-#pstr
-#pstr <- subset_samples(Bac.seq.rel, species == "Colpophyllia natans")
-#pstr.ra <- transform_sample_counts(pstr, function(x) x/ sum(x))
 
-pstr.core <- core(Bac.seq.rel.pstr, detection = 0.0001, prevalence = .97)
-pstr.core.taxa <- tax_table(pstr.core)
-View(as.data.frame(pstr.core.taxa))
-pstr.core.melt <- psmelt(pstr.core)
-pstr.core.melt$top.group <- "core"
-write.csv(pstr.core.melt, "stats/pstr_core.csv")
-
-##Plotting
-#check # of OTUs
-p.pstr <- ggplot(pstr.core.melt, aes(x = Sample, y = Genus, size = Abundance)) +
-  geom_point() +
-  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9 )) +
-  coord_fixed(ratio = 0.9) +
-  scale_color_manual(values=c("dodgerblue4", "darkorange2","indianred3")) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1));p.pstr
-print(p.pstr)
-ggsave("Figures/pstr_core_bubble.pdf")
 
 ```
 
-
-Bar plots
+Bar plots DO NOT NEED this is everything not helpful
 ```{r}
 
 Bac.phy <- Bac.seq.rel %>% 
@@ -728,7 +944,7 @@ palette <- viridis_pal(option = "C")(50)
 
 
 #plot all (impossible to see)
-ggplot(Bac.phy.melt, aes(x = sample_name, y = Abundance, fill = Phylum)) +
+ggplot(Bac.phy.melt, aes(x = species, y = Abundance, fill = Phylum)) +
   geom_bar(stat = "identity") +
   #scale_fill_manual(values=pal) +
           scale_color_manual(values=pal$hex)+
@@ -1035,9 +1251,35 @@ plot_bar(Bac.phy.dlab, fill = "Phylum")+theme(legend.position="bottom")
 ```
 
 #### Final time point by species
-#C. natans
+###Data analysis in resposne to exposure to SCTLD adults
+
+#C. natans only
+PERMANOVA and Visualization
 ```{r}
-Bac.seq.cnat.f<-subset_samples(Bac.seq.cnat, time.point== "final")
+#look at any change in control corals initial-final (not diseased)
+Bac.seq.cnat<-subset_samples(Bac.seq.rel, species== "Colpophyllia natans")
+Bac.seq.cnat.control<-subset_samples(Bac.seq.cnat, treatment== "control")
+Bac.seq.cnat.control = prune_taxa(taxa_sums(Bac.seq.cnat.control) > 0, Bac.seq.cnat.control) #this removes any OTU with 0s
+Bac.seq.cnat.control.sd <- as(sample_data(Bac.seq.cnat.control), "data.frame") #look at samp data
+
+#make unifrac matrix
+Bac.seq.cnat.control.wu <- phyloseq::distance(Bac.seq.cnat.control, method = "wunifrac")
+s.u.samp.cnat.control.df <- as(sample_data(Bac.seq.cnat.control), "data.frame") #sample df
+
+#adonixs test between sample types: p=0.001 shows drift in controls
+set.seed(30)
+adonis2(Bac.seq.cnat.control.wu ~ time.point, data = s.u.samp.cnat.control.df)
+
+# Homogeneity of dispersion test  - no differences 
+    set.seed(30) 
+    permutest(betadisper(Bac.seq.cnat.control.wu, s.u.samp.cnat.control.df$time.point, type = "centroid"))
+  ball<-  betadisper(Bac.seq.cnat.control.wu, s.u.samp.cnat.control.df$time.point, type = "centroid")
+  TukeyHSD(ball,  ordered = FALSE,conf.level = 0.95)
+
+#final time point only ####
+Bac.seq.cnat<-subset_samples(Bac.seq.rel, species== "Colpophyllia natans")
+Bac.seq.cnat<-subset_samples(Bac.seq.cnat, time.point== "final")
+Bac.seq.cnat.f<-Bac.seq.cnat #make a copy
 Bac.seq.cnat.f = prune_taxa(taxa_sums(Bac.seq.cnat.f) > 0, Bac.seq.cnat.f) #this removes any OTU with 0s
 
 Bac.seq.cnat.f.sd <- as(sample_data(Bac.seq.cnat.f), "data.frame") #look at samp data
@@ -1053,7 +1295,7 @@ adonis2(Bac.seq.wu.cnat.f ~ treatment, data = Bac.seq.cnat.f.sd)
 # Homogeneity of dispersion test  
     set.seed(30) 
     permutest(betadisper(Bac.seq.wu.cnat.f, s.u.samp.cnat.f.df$treatment, type = "centroid"))
-  ball<-  betadisper(Bac.seq.wu.cnat.f, s.u.samp.cnat.f.df$code, type = "centroid")
+  ball<-  betadisper(Bac.seq.wu.cnat.f, s.u.samp.cnat.f.df$treatment, type = "centroid")
   TukeyHSD(ball,  ordered = FALSE,conf.level = 0.95)
 
 #plot
@@ -1071,111 +1313,1642 @@ p<-ggplot(scores.ord.u_RelA_stats.cnat, aes(x = NMDS1, y = NMDS2)) +
   geom_point(aes(colour = treatment), size = 4) +
     scale_color_manual(values=c("turquoise3","orange"))+
   stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = treatment), linetype = 2) +
-  ggtitle(expression(italic("C. natans") * " microbiome NMDS")) +
+  ggtitle(expression(italic("Colpophyllia natans") * " Microbial Communities After Treatment NMDS")) +
   theme_classic();p
-ggsave("Figures/cnat.final_NMDS.pdf", plot = p, width = 8, height = 6) 
+ggsave("Figures/cnat.final_NMDS.jpg", plot = p, width = 8, height = 6) 
+```
+CNAT final bar plots
+Same code from above initial
+```{r}
 
-#bar plot FAMILY ####
-#family
+#family####
+Bac.fam.fin.cnat <- Bac.seq.cnat.f %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.fin.cnat <- psmelt(Bac.fam.fin.cnat)
+  
+  Bac.fam.avg.cnat <- Bac.fam.melt.fin.cnat %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop.cnat <- Bac.fam.avg.cnat %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  f<-ggplot(Bac.fam.prop.cnat, aes(x = treatment, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "hide",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;f
+  ggsave("Figures/final_bar_treatment.jpg", plot = f, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.fin <- psmelt(Bac.fam.fin)
+  
+  Bac.fam.avg.cnat <- Bac.fam.melt.fin %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop.cnat <- Bac.fam.avg.cnat %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.cnat <- Bac.fam.prop.cnat %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop.cnat <- Bac.fam.prop.cnat %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla.cnat$Family & treatment %in% top_10_phyla.cnat$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+g<-ggplot(Bac.fam.prop.cnat, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop.cnat$FillColor[!Bac.fam.prop.cnat$FillColor == "Other"]))), unique(Bac.fam.prop.cnat$FillColor[!Bac.fam.prop.cnat$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;g
+  ggsave("Figures/final_bar_species_famTOP10_cnat.jpg", plot = b, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10.cnat<-subset(Bac.fam.prop.cnat, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+h<-ggplot(Bac.fam.prop.Top10.cnat, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) +
+  facet_wrap(~Family);h # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_cnat.jpg", plot = h, width = 18, height = 8)
+  
+  
+  
+  
+#phylum####
+Bac.phy.fin.cnat <- Bac.fam.fin %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.fin <- psmelt(Bac.phy.fin.cnat)
+  
+  Bac.phy.avg.cnat <- Bac.phy.melt.fin %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.cnat <- Bac.phy.avg.cnat %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  i<-ggplot(Bac.phy.prop.cnat, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;i
+    ggsave("Figures/fin_bar_species.phylum_cnat.jpg", plot = i, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.fin.cnat <- psmelt(Bac.phy.fin.cnat)
+  
+  Bac.phy.avg.cnat <- Bac.phy.melt.fin.cnat %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.cnat <- Bac.phy.avg.cnat %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.cnat <- Bac.phy.prop.cnat %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop.cnat <- Bac.phy.prop.cnat %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla.cnat$Phylum & treatment %in% top_10_phyla.cnat$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+j<-ggplot(Bac.phy.prop.cnat, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop.cnat$FillColor[!Bac.phy.prop.cnat$FillColor == "Other"]))), unique(Bac.phy.prop.cnat$FillColor[!Bac.phy.prop.cnat$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;j
+  ggsave("Figures/fin_bar_species_phyTOP10_cnat.jpg", plot = j, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10.cnat<-subset(Bac.phy.prop.cnat, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+k<-ggplot(Bac.phy.prop.Top10.cnat, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;j
+  facet_wrap(~Phylum);k  # Add plot title
+  ggsave("Figures/fin_bar_species_phyTOP10_FACET_cnat.jpg", plot = k, width = 8, height = 6)
+```
+CNAT Core taxa
+```{r}
+
+# Count unique OTUs or ASVs (this is too high res)
+otu_table.cnat <- otu_table(Bac.seq.cnat.f)
+unique_otus <- sum(otu_table.cnat > 0, na.rm = TRUE)
+print(unique_otus)
+
+#core controls
+Bac.seq.cnat.f.con<-subset_samples(Bac.seq.cnat.f, treatment=="control")
+core.taxa.standard.con <- core_members(Bac.seq.cnat.f.con, detection = 0.0001, prevalence = .95)
+core.taxa.standard.con
+
+taxonomy_table.con <- tax_table(Bac.seq.cnat.f.con)
+core_taxonomy.con <- taxonomy_table[rownames(taxonomy_table.con) %in% core.taxa.standard.con, ]
+core_taxonomy.con_df <- as.data.frame(core_taxonomy.con)
+print(core_taxonomy.con_df)
+
+#core treatment
+Bac.seq.cnat.f.treat<-subset_samples(Bac.seq.cnat.f, treatment=="disease")
+core.taxa.standard.treat <- core_members(Bac.seq.cnat.f.treat, detection = 0.0001, prevalence = .95)
+core.taxa.standard.treat
+
+taxonomy_table.treat <- tax_table(Bac.seq.cnat.f.treat)
+core_taxonomy.treat <- taxonomy_table[rownames(taxonomy_table.treat) %in% core.taxa.standard.treat, ]
+core_taxonomy.treat_df <- as.data.frame(core_taxonomy.treat)
+print(core_taxonomy.treat_df)
+
+
+######## try to do by treatment
+
+#family####
 Bac.fam.cnat <- Bac.seq.cnat.f %>% 
   tax_glom(taxrank = "Family", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
+  
   Bac.fam.melt.cnat <- psmelt(Bac.fam.cnat)
-Bac.fam.melt.cnat$treatment_sample <- paste(Bac.fam.melt.cnat$treatment, Bac.fam.melt.cnat$sample_name, sep = "_")
-
-#plot individual samples
-p<-  ggplot(Bac.fam.melt.cnat, aes(x = treatment_sample, y = Abundance, fill = Family)) +
-  geom_bar(stat = "identity") +
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-  ggtitle(expression(italic("C. natans") ~ "by Family"));p
-ggsave("Figures/cnat.final.bar.all.pdf", plot = p, width = 8, height = 6) 
-
-
-
-#plot by treatment group relabund  
- # Calculate the total abundance for each treatment group
-Bac.fam.melt.cnat2 <- Bac.fam.melt.cnat %>%
+  
+  Bac.fam.avg <- Bac.fam.melt.cnat %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
   group_by(treatment) %>%
-  mutate(total_abundance = sum(Abundance))
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
 
-# Calculate the relative abundance
-Bac.fam.melt.cnat2 <- Bac.fam.melt.cnat2 %>%
-  mutate(relative_abundance = Abundance / total_abundance)
+  k<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;k
+  ggsave("Figures/fin_bar_species_cnat.jpg", plot = k, width = 8, height = 6)
 
-# Check the updated data frame
-head(Bac.fam.melt.cnat2)
+ #Do these plots again by top 10 taxa levels ####
 
-custom_labels <- c("Control", "SCTLD-Exposed")  # Replace with your actual labels
+#try top 10 first family ####
+  Bac.fam.melt.cnat <- psmelt(Bac.seq.cnat.f)
+  
+  Bac.fam.avg <- Bac.fam.melt.cnat %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
 
- p<- ggplot(Bac.fam.melt.cnat2, aes(x = treatment, y = relative_abundance, fill = Family)) +
-  geom_bar(stat = "identity") +
-  ylab("Relative Abundance") +
-  #theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-  ggtitle(expression(italic("C. natans") ~ "by Family"))+
-      scale_x_discrete(labels = custom_labels)+
-theme(
-    panel.background = element_blank(),  # Remove background color
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    panel.border = element_rect(colour = "black", fill = NA, size = 1)  # Add a black border around the plot
-  );p
-  ggsave("Figures/cnat.final.bar.fam.treat.png", plot = p, width = 33, height = 6) 
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.fam.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
 
-#bar plot PHYLUM ####
-#phy
-Bac.phy.cnat.p <- Bac.seq.cnat.f %>% 
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop <- Bac.fam.prop %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla$Family & treatment %in% top_10_phyla$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+m<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"]))), unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;m
+  ggsave("Figures/fin_bar_species_famTOP10_cnat.jpg", plot = l, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10<-subset(Bac.fam.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+n<-ggplot(Bac.fam.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment"))+
+  facet_wrap(~Family);n  # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_cnat.jpg", plot = n, width = 18, height = 8)
+  
+  
+
+#phylum####
+Bac.phy.cnat <- Bac.seq.cnat.f %>% 
   tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
   transform_sample_counts(function(x) {x/sum(x)} ) 
-  Bac.phy.melt.cnat.p <- psmelt(Bac.phy.cnat.p)
-Bac.phy.melt.cnat.p$treatment_sample <- paste(Bac.phy.melt.cnat.p$treatment, Bac.phy.melt.cnat.p$sample_name, sep = "_")
-
-p<-  ggplot(Bac.phy.melt.cnat.p, aes(x = treatment_sample, y = Abundance, fill = Phylum)) +
-  geom_bar(stat = "identity") +
-  ylab("Relative Abundance") +
-  xlab("individual") +
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-  ggtitle(expression(italic("C. natans") ~ "by Phylum"));p
-ggsave("Figures/cnat.final.bar.all.phy.pdf", plot = p, width = 8, height = 6) 
-
-#plot by treatment group relabund
-
- # Calculate the total abundance for each treatment group
-Bac.phy.melt.cnat.p2 <- Bac.phy.melt.cnat.p %>%
+  Bac.phy.melt.cnat <- psmelt(Bac.phy.cnat)
+  
+  Bac.phy.avg <- Bac.phy.melt.cnat %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
   group_by(treatment) %>%
-  mutate(total_abundance = sum(Abundance))
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
 
-# Calculate the relative abundance
-Bac.phy.melt.cnat2 <- Bac.phy.melt.cnat.p2 %>%
-  mutate(relative_abundance = Abundance / total_abundance)
+  n<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));n
+  ggsave("Figures/fin_bar_species.phylum_cnat.jpg", plot = n, width = 8, height = 6)
 
-# Check the updated data frame
-head(Bac.phy.melt.cnat2)
+#try top 10 Phylum ####
+  Bac.phy.melt.cnat <- psmelt(Bac.phy.cnat)
+  
+  Bac.phy.avg <- Bac.phy.melt.cnat %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
 
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.phy.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop <- Bac.phy.prop %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla$Phylum & treatment %in% top_10_phyla$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+o<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"]))), unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Colpophyllia natans") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));o
+  ggsave("Figures/fin_bar_species_phyTOP10_cnat.jpg", plot = o, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10<-subset(Bac.phy.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+p<-ggplot(Bac.phy.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("orange","turquoise3"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Top 10 Phylum Abundance by Coral Species")+
+  facet_wrap(~Phylum);p  # Add plot title
+  ggsave("Figures/initial_bar_species_phyTOP10_FACET.jpg", plot = p, width = 8, height = 6)
+```
+Cnat bubble
+```{r}
+cnat.core <- core(Bac.seq.cnat.f, detection = 0.001, prevalence = .8)
+cnat.core.taxa <- tax_table(cnat.core)
+View(as.data.frame(cnat.core.taxa))
+cnat.core.melt <- psmelt(cnat.core)
+cnat.core.melt$top.group <- "core"
+write.csv(cnat.core.melt, "stats/cnat_core.csv")
+
+cnat.core.melt$Sample <- factor(cnat.core.melt$Sample, levels = cnat.core.melt$Sample[order(cnat.core.melt$treatment)])
+
+
+##Plotting
+  q <- ggplot(cnat.core.melt, aes(x = factor(Sample, levels = unique(Sample[order(treatment)])), 
+                                     y = Genus, size = Abundance, color = treatment)) +
+  geom_point(aes(color=treatment)) +
+  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9)) +
+  coord_fixed(ratio = 0.9) +
+    scale_color_manual(values=c("orange","turquoise3"))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        aspect.ratio = 0.7);q
+  ggsave("Figures/cnat_core_bubble_final.jpg", plot = q, width = 8, height = 4)
+
+```
+CNAT  - indicator analysis
+```{r}
+#install.packages("indicspecies")
+library(indicspecies)
+
+# Extract the OTU table and metadata
+otu_table <- as.data.frame(otu_table(Bac.seq.cnat.f))
+metadata <- sample_data(Bac.seq.cnat.f)
+
+# Ensure the grouping variable is a factor
+metadata$Group <- as.factor(metadata$treatment)  
+
+# Run the Indicator Species Analysis
+ind_val <- multipatt(otu_table, metadata$treatment, func = "IndVal.g", control = how(nperm = 999))
+
+# View the summary of results
+summary(ind_val)
+
+# To get significant indicator taxa
+sig_indicators <- ind_val$sign[ind_val$sign$p.value <= 0.05, ]
+sig_indicators <- na.omit(sig_indicators)
+sig_indicators <- sig_indicators[sig_indicators$p.value <= 0.044, ]
+print(sig_indicators)
+
+
+#Plot the significant taxa for CONTROLs. ####
+sig_indicators.cont<-subset(sig_indicators, s.control=="1")
+sig_indicators.cont.OTUs <- rownames(sig_indicators.cont)
+
+ps_subset.con <- prune_taxa(sig_indicators.cont.OTUs, Bac.seq.cnat.f)
+ps_melt.con <- psmelt(ps_subset.con)
+ps_melt.con$TaxaName <- ps_melt.con$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+#     #add stat back in for OTUs - not running
+#     sig_indicators.cont_with_rownames <- data.frame(RowNames = rownames(sig_indicators.cont), sig_indicators.cont)
+#     
+#     # Select only the RowNames and a specific column (e.g., column A)
+#     ps_melt.con.stat <- sig_indicators.cont_with_rownames %>%
+#       dplyr::select(RowNames, stat)
+#     rownames(ps_melt.con.stat) <- NULL
+# 
+#     # add the stats by OTU to the main df. 
+# ps_melt.con<-merge(ps_melt.con, ps_melt.con.stat,  all.x=TRUE)
+
+# Step 1: Calculate average abundance of each OTU in the control treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.con %>%
+  #filter(treatment == "control") %>%  # Filter for control treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.con with unique labels and order x-axis
+ps_melt.con <- ps_melt.con %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.con, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Controls");r
+  ggsave("Figures/cnat_final_control_indicator.jpg", plot = r, width = 8, height = 6)
+
+
+
+
+
+
+#Plot the significant taxa for DISEASE ####
+sig_indicators.dis<-subset(sig_indicators, s.disease=="1")
+sig_indicators.dis.OTUs <- rownames(sig_indicators.dis)
+
+ps_subset.dis <- prune_taxa(sig_indicators.dis.OTUs, Bac.seq.cnat.f)
+ps_melt.dis <- psmelt(ps_subset.dis)
+ps_melt.dis$TaxaName <- ps_melt.dis$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+
+# Step 1: Calculate average abundance of each OTU in the disrol treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.dis %>%
+  #filter(treatment == "disrol") %>%  # Filter for disrol treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.dis with unique labels and order x-axis
+ps_melt.dis <- ps_melt.dis %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.dis, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Disease-Exposed");r
+  ggsave("Figures/cnat_final_disease_indicator.jpg", plot = r, width = 8, height = 6)
+
+```
+CNAT Alpha diversity 
+Alpha Diversity by Treatment (Final timepoint)
+```{r}
+Bac.seq.S.raw<- Bac.seq.S.2
+Bac.seq.S.raw<- subset_samples(Bac.seq.S.raw, time.point!="bath")
+
+otu_table <- otu_table(Bac.seq.S.raw)
+otu_df <- as.data.frame(otu_table)
+
+Bac.seq.raw.cnat<-subset_samples(Bac.seq.S.raw, species=="Colpophyllia natans")
+Bac.seq.raw.cnat.fin<-subset_samples(Bac.seq.raw.cnat, time.point=="final")
+
+Bac.seq.raw.cnat = prune_taxa(taxa_sums(Bac.seq.raw.cnat) > 0, Bac.seq.raw.cnat) 
+Bac.seq.raw.cnat.sd <- as(sample_data(Bac.seq.raw.cnat), "data.frame") #sample df
+
+#make unifrac matrix
+Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.raw.cnat, method = "wunifrac")
+s.u.samp.df.ini <- as(sample_data(Bac.seq.raw.cnat), "data.frame") #sample df
+s.u.samp.df.ini$treatment<-as.factor(s.u.samp.df.ini$treatment)
+  
+# pull out: observed, diversity_shannon, evenness_pielou
+erich.tab.obs <-microbiome::alpha(Bac.seq.raw.cnat, index = "observed") 
+  erich.tab.obs$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+    erich.tab.obs$treatment <- as.factor(s.u.samp.df.ini$treatment)
+
+erich.tab.shan <-microbiome::alpha(Bac.seq.raw.cnat, index = "diversity_shannon")
+    erich.tab.shan$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+                erich.tab.shan$time.point <- as.factor(s.u.samp.df.ini$time.point)
+
+erich.tab.even <-microbiome::alpha(Bac.seq.raw.cnat, index = "evenness_pielou")
+    erich.tab.even$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+                erich.tab.shan$time.point <- as.factor(s.u.samp.df.ini$time.point)
+
+
+alpha<-merge(erich.tab.obs, erich.tab.even, by.all="sample_name")
+alpha<-merge(alpha, erich.tab.shan, by="sample_name")
+#write.csv(erich.tab.obs, "erich.tab.obs.csv")
+#add meta
+alpha<-merge(alpha, s.u.samp.df.ini)
+
+#shannon ####
+  hist(alpha$diversity_shannon)
+  set.seed(30)
+  aov.shannon = aov(diversity_shannon ~ treatment.x, data=alpha)
+    summary(aov.shannon) 
+    
+#means
+shannon_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(diversity_shannon[!is.na(diversity_shannon)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(diversity_shannon, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(diversity_shannon, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(diversity_shannon, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);shannon_mean
+
+#set colors
+custom_colors <- c("disease" = "#E69F00", "control" = "#56B4E9")  
 custom_labels <- c("Control", "SCTLD-Exposed")  # Replace with your actual labels
 
- p<- ggplot(Bac.phy.melt.cnat2, aes(x = treatment, y = relative_abundance, fill = Phylum)) +
-  geom_bar(stat = "identity") +
-  ylab("Relative Abundance") +
-  #theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+  
-  ggtitle(expression(italic("C. natans") ~ "by Phylum"))+
-      scale_x_discrete(labels = custom_labels)+
-theme(
-    panel.background = element_blank(),  # Remove background color
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    panel.border = element_rect(colour = "black", fill = NA, size = 1)  # Add a black border around the plot
-  );p
-  ggsave("Figures/cnat.final.bar.treat.pdf", plot = p, width = 19, height = 8) 
+
+shannon_plot<-ggplot(data=shannon_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Shannon Diversity"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Shannon diversity")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));shannon_plot
+ggsave("Figures/cnat_shannon.pdf", shannon_plot)
+
+#Richness ####
+  hist(alpha$observed)
+  set.seed(30)
+  aov.observed = aov(observed ~ treatment.x, data=alpha)
+    summary(aov.observed) # away p=0.038
+    
+#means
+observed_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(observed[!is.na(observed)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(observed, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(observed, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(observed, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);observed_mean
+
+rich_plot<-ggplot(data=observed_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Richness"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Richness")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));rich_plot
+ggsave("Figures/cnat_rich.pdf", rich_plot)
+
+
+#evenness ####
+  hist(alpha$evenness_pielou)
+  set.seed(30)
+  aov.evenness = aov(evenness_pielou ~ treatment.x, data=alpha)
+    summary(aov.evenness) #
+    
+#means
+evenness_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(evenness_pielou[!is.na(evenness_pielou)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(evenness_pielou, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(evenness_pielou, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(evenness_pielou, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);evenness_mean
+
+even_plot<-ggplot(data=evenness_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+    theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Evenness"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Evenness")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));even_plot
+ggsave("Figures/cnat_even.pdf", even_plot)
+
+library(grid)
+
+g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
+            # widths = c(1, 1, 1),  # Adjust widths as needed
+            # heights = c(3),       # Adjust heights as needed
+           #  asp = 1)              # Set aspect ratio
+ggsave("Figures/cnat_alpha.jpg", g,width = 9, height = 5)
+
+
+
+```
+
+#D. lab only
+PERMANOVA and Visualization
+This is the only species with repeat sampling. Include T0
+```{r}
+#look at any change in control corals initial-final (not diseased)
+Bac.seq.dlab<-subset_samples(Bac.seq.rel, species== "Diploria labyrinthiformis")
+Bac.seq.dlab.control<-subset_samples(Bac.seq.dlab, treatment== "control")
+Bac.seq.dlab.control = prune_taxa(taxa_sums(Bac.seq.dlab.control) > 0, Bac.seq.dlab.control) #this removes any OTU with 0s
+Bac.seq.dlab.control.sd <- as(sample_data(Bac.seq.dlab.control), "data.frame") #look at samp data
+
+#make unifrac matrix
+Bac.seq.dlab.control.wu <- phyloseq::distance(Bac.seq.dlab.control, method = "wunifrac")
+s.u.samp.dlab.control.df <- as(sample_data(Bac.seq.dlab.control), "data.frame") #sample df
+
+#adonixs test between sample types: p=0.001 shows drift in controls
+set.seed(30)
+adonis2(Bac.seq.dlab.control.wu ~ time.point, data = s.u.samp.dlab.control.df)
+
+# Homogeneity of dispersion test  - no differences 
+    set.seed(30) 
+    permutest(betadisper(Bac.seq.dlab.control.wu, s.u.samp.dlab.control.df$time.point, type = "centroid"))
+  ball<-  betadisper(Bac.seq.dlab.control.wu, s.u.samp.dlab.control.df$time.point, type = "centroid")
+  TukeyHSD(ball,  ordered = FALSE,conf.level = 0.95)
+```
+all time points
+```{r}
+#all time points ####
+Bac.seq.dlab<-subset_samples(Bac.seq.rel, species== "Diploria labyrinthiformis")
+#Bac.seq.dlab<-subset_samples(Bac.seq.dlab, time.point== "final")
+Bac.seq.dlab.f<-Bac.seq.dlab #make a copy
+Bac.seq.dlab.f = prune_taxa(taxa_sums(Bac.seq.dlab.f) > 0, Bac.seq.dlab.f) #this removes any OTU with 0s
+
+Bac.seq.dlab.f.sd <- as(sample_data(Bac.seq.dlab.f), "data.frame") #look at samp data
+
+#make unifrac matrix
+Bac.seq.wu.dlab.f <- phyloseq::distance(Bac.seq.dlab.f, method = "wunifrac")
+s.u.samp.dlab.f.df <- as(sample_data(Bac.seq.dlab.f), "data.frame") #sample df
+
+#adonixs test between sample types: 
+set.seed(30)
+adonis_result<-adonis2(Bac.seq.wu.dlab.f ~ treatment*time.point, data = Bac.seq.dlab.f.sd)
+#posthoc
+Bac.seq.dlab.f.sd$interaction <- interaction(Bac.seq.dlab.f.sd$treatment, Bac.seq.dlab.f.sd$time.point)
+pairwise_results <- pairwise.adonis2(Bac.seq.wu.dlab.f ~ interaction, 
+                                     data = Bac.seq.dlab.f.sd, 
+                                     permutations = 999)
+
+adonis_result<-adonis2(Bac.seq.wu.dlab.f ~ treatment:time.point:plug.id, data = Bac.seq.dlab.f.sd)
+
+# Homogeneity of dispersion test  
+    set.seed(30) 
+   dispersion_test <- betadisper(Bac.seq.wu.dlab.f, interaction(s.u.samp.dlab.f.df$treatment, s.u.samp.dlab.f.df$time.point))
+
+# Perform ANOVA to test for significance
+anova_dispersion <- anova(dispersion_test)
+print(anova_dispersion)
+
+#plot
+
+##### NMDS ####
+unifrac.dlab.f <- ordinate(Bac.seq.dlab.f, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
+stressplot(unifrac.dlab.f)
+print(unifrac.dlab.f)# stress score .172
+scores.ord.u_RelA_stats.dlab<-as.data.frame(cbind(vegan::scores(unifrac.dlab.f, display="sites")))  
+     Bac.seq.dlab.f.sd <- as(sample_data(Bac.seq.dlab.f), "data.frame") #sample df
+
+scores.ord.u_RelA_stats.dlab$treatment <- Bac.seq.dlab.f.sd$treatment
+scores.ord.u_RelA_stats.dlab$plug.id <- Bac.seq.dlab.f.sd$plug.id
+scores.ord.u_RelA_stats.dlab$time.point <- Bac.seq.dlab.f.sd$time.point
+scores.ord.u_RelA_stats.dlab$code <- paste(Bac.seq.dlab.f.sd$time.point, Bac.seq.dlab.f.sd$treatment)
+
+
+
+p<-ggplot(scores.ord.u_RelA_stats.dlab, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(aes(colour = code,shape = time.point), size = 4) +
+    scale_color_manual(values=c("turquoise3","orange","gray", "gray"))+
+stat_ellipse(aes(colour = code), linetype = 2, size = 1) +
+  geom_line(aes(group = plug.id), color = "grey50", linetype = "solid", alpha = 0.5, size = 0.5) +  # Connect the same individual across treatments
+  ggtitle(expression(italic("Diploria labyrinthiformis") * " Microbial Communities After Treatment NMDS")) +
+  theme_classic();p
+s<-p+facet_wrap(~treatment)
+ggsave("Figures/dlab.final_NMDS.jpg", plot = s, width = 8, height = 6) 
+r<-p+facet_wrap(~time.point)
+ggsave("Figures/dlab.final_NMDS.time.jpg", plot = r, width = 8, height = 6) 
+
+# 
+# #since we can't do random effects. so lete's try something else
+# #let's try using hte NMDS coordinates as the main effect. 
+# 
+# sample_data(Bac.seq.dlab.f)$NMDS1 <- scores(unifrac.dlab.f, display = "sites")[, 1]
+# 
+# # Add a grouping variable (e.g., treatment) and a random effect (e.g., block) to the metadata
+# # Assume your phyloseq object has these variables in the sample_data
+# sample_data(Bac.seq.dlab.f)$Group <- sample_data(Bac.seq.dlab.f)$treatment  # Replace with your actual grouping variable
+# sample_data(Bac.seq.dlab.f)$Block <- sample_data(Bac.seq.dlab.f)$plug.id      # Replace with your actual random effect
+# 
+# # Convert the sample data to a data frame for use in lmer
+# meta_data <- data.frame(sample_data(Bac.seq.dlab.f))
+# 
+# # Step 3: Fit the mixed-effects model
+# nmds_model <- lmer(NMDS1 ~ Group + (1 | Block), data = meta_data)
+# 
+# # Step 4: View the summary of the model
+# summary(nmds_model)
+
+
+
+
+
+```
+dlab final bar plots
+Same code from above initial
+```{r}
+
+#family####
+Bac.fam.fin.dlab <- Bac.seq.dlab.f %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.fin.dlab <- psmelt(Bac.fam.fin.dlab)
+  
+  Bac.fam.avg.dlab <- Bac.fam.melt.fin.dlab %>%
+  group_by(treatment,time.point, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  desired_order <- c("initial",  "final")  # Replace with your actual time.points in desired order
+  
+  Bac.fam.prop.dlab <- Bac.fam.avg.dlab %>%
+  mutate(time.point = factor(time.point, levels = desired_order)) %>%  # Reorder time.point factor
+  group_by(treatment, time.point) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+  
+
+
+  t<-ggplot(Bac.fam.prop.dlab, aes(x = time.point, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "hide",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) +
+    facet_wrap(~treatment);t
+  ggsave("Figures/dlabfinal_bar_treatment.jpg", plot = t, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.fin <- psmelt(Bac.fam.fin)
+  
+  Bac.fam.avg.dlab <- Bac.fam.melt.fin %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop.dlab <- Bac.fam.avg.dlab %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.dlab <- Bac.fam.prop.dlab %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop.dlab <- Bac.fam.prop.dlab %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla.dlab$Family & treatment %in% top_10_phyla.dlab$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+g<-ggplot(Bac.fam.prop.dlab, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop.dlab$FillColor[!Bac.fam.prop.dlab$FillColor == "Other"]))), unique(Bac.fam.prop.dlab$FillColor[!Bac.fam.prop.dlab$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;g
+  ggsave("Figures/final_bar_species_famTOP10_dlab.jpg", plot = b, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10.dlab<-subset(Bac.fam.prop.dlab, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+h<-ggplot(Bac.fam.prop.Top10.dlab, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment for top 10 most abundant ASVs")) +
+  facet_wrap(~Family);h # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_dlab.jpg", plot = h, width = 18, height = 8)
+  
+  
+  
+  
+#phylum####
+Bac.phy.fin.dlab <- Bac.fam.fin %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.fin <- psmelt(Bac.phy.fin.dlab)
+  
+  Bac.phy.avg.dlab <- Bac.phy.melt.fin %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.dlab <- Bac.phy.avg.dlab %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  i<-ggplot(Bac.phy.prop.dlab, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;i
+    ggsave("Figures/fin_bar_species.phylum_dlab.jpg", plot = i, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.fin.dlab <- psmelt(Bac.phy.fin.dlab)
+  
+  Bac.phy.avg.dlab <- Bac.phy.melt.fin.dlab %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.dlab <- Bac.phy.avg.dlab %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.dlab <- Bac.phy.prop.dlab %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop.dlab <- Bac.phy.prop.dlab %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla.dlab$Phylum & treatment %in% top_10_phyla.dlab$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+j<-ggplot(Bac.phy.prop.dlab, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop.dlab$FillColor[!Bac.phy.prop.dlab$FillColor == "Other"]))), unique(Bac.phy.prop.dlab$FillColor[!Bac.phy.prop.dlab$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;j
+  ggsave("Figures/fin_bar_species_phyTOP10_dlab.jpg", plot = j, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10.dlab<-subset(Bac.phy.prop.dlab, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+k<-ggplot(Bac.phy.prop.Top10.dlab, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;k
+  facet_wrap(~Phylum);k  # Add plot title
+  ggsave("Figures/fin_bar_species_phyTOP10_FACET_dlab.jpg", plot = k, width = 8, height = 6)
+```
+dlab Core taxa (edit)
+```{r}
+
+# Count unique OTUs or ASVs 
+otu_table.dlab <- otu_table(Bac.seq.dlab.f)
+unique_otus <- sum(otu_table.dlab > 0, na.rm = TRUE)
+print(unique_otus)
+
+#core controls
+Bac.seq.dlab.f.con<-subset_samples(Bac.seq.dlab.f, treatment=="control")
+core.taxa.standard.con <- core_members(Bac.seq.dlab.f.con, detection = 0.0001, prevalence = .95)
+core.taxa.standard.con
+
+taxonomy_table.con <- tax_table(Bac.seq.dlab.f.con)
+core_taxonomy.con <- taxonomy_table.con[rownames(taxonomy_table.con) %in% core.taxa.standard.con, ]
+core_taxonomy.con_df <- as.data.frame(core_taxonomy.con)
+print(core_taxonomy.con_df)
+
+#core treatment
+Bac.seq.dlab.f.treat<-subset_samples(Bac.seq.dlab.f, treatment=="disease")
+Bac.seq.dlab.f.treat<-subset_samples(Bac.seq.dlab.f, time.point=="final")
+core.taxa.standard.treat <- core_members(Bac.seq.dlab.f.treat, detection = 0.0001, prevalence = .95)
+core.taxa.standard.treat
+
+taxonomy_table.treat <- tax_table(Bac.seq.dlab.f.treat)
+core_taxonomy.treat <- taxonomy_table.treat[rownames(taxonomy_table.treat) %in% core.taxa.standard.treat, ]
+core_taxonomy.treat_df <- as.data.frame(core_taxonomy.treat)
+print(core_taxonomy.treat_df)
+
+
+######## try to do by treatment
+
+#family####
+Bac.fam.dlab <- Bac.seq.dlab.f %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.dlab <- psmelt(Bac.fam.dlab)
+  
+  Bac.fam.avg <- Bac.fam.melt.dlab %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  k<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;k
+  ggsave("Figures/fin_bar_species_dlab.jpg", plot = k, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.dlab <- psmelt(Bac.seq.dlab.f)
+  
+  Bac.fam.avg <- Bac.fam.melt.dlab %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.fam.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop <- Bac.fam.prop %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla$Family & treatment %in% top_10_phyla$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+m<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"]))), unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;m
+  ggsave("Figures/fin_bar_species_famTOP10_dlab.jpg", plot = l, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10<-subset(Bac.fam.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+n<-ggplot(Bac.fam.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment"))+
+  facet_wrap(~Family);n  # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_dlab.jpg", plot = n, width = 18, height = 8)
+  
+  
+
+#phylum####
+Bac.phy.dlab <- Bac.seq.dlab.f %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.dlab <- psmelt(Bac.phy.dlab)
+  
+  Bac.phy.avg <- Bac.phy.melt.dlab %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  n<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));n
+  ggsave("Figures/fin_bar_species.phylum_dlab.jpg", plot = n, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.dlab <- psmelt(Bac.phy.dlab)
+  
+  Bac.phy.avg <- Bac.phy.melt.dlab %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.phy.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop <- Bac.phy.prop %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla$Phylum & treatment %in% top_10_phyla$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+o<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"]))), unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Diploria labyrinthiformis") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));o
+  ggsave("Figures/fin_bar_species_phyTOP10_dlab.jpg", plot = o, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10<-subset(Bac.phy.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+p<-ggplot(Bac.phy.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("orange","turquoise3"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Abundance Microbiome Top 10 Phylum D. labyrinthiformis  ")+
+  facet_wrap(~Phylum);p  # Add plot title
+  ggsave("Figures/fin_bar_species_phyTOP10_facet_dlab.jpg", plot = p, width = 8, height = 6)
+```
+dlab bubble (edit)
+```{r}
+Bac.seq.dlab.final<-subset_samples(Bac.seq.dlab.f, time.point== "final")
+
+dlab.core <- core(Bac.seq.dlab.final, detection = 0.0001, prevalence = .95)
+dlab.core.taxa <- tax_table(dlab.core)
+View(as.data.frame(dlab.core.taxa))
+dlab.core.melt <- psmelt(dlab.core)
+dlab.core.melt$top.group <- "core"
+#write.csv(dlab.core.melt, "stats/dlab_core.csv")
+
+dlab.core.melt$Sample <- factor(dlab.core.melt$Sample, levels = dlab.core.melt$Sample[order(dlab.core.melt$treatment)])
+
+
+##Plotting
+  q <- ggplot(dlab.core.melt, aes(x = factor(Sample, levels = unique(Sample[order(treatment)])), 
+                                     y = Genus, size = Abundance, color = treatment)) +
+  geom_point(aes(color=code)) +
+  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9)) +
+  coord_fixed(ratio = 0.9) +
+    scale_color_manual(values=c("orange","turquoise3"))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        aspect.ratio = 0.7);q
+  ggsave("Figures/dlab_core_bubble_final.jpg", plot = q, width = 8, height = 4)
+
+```
+dlab  - indicator analysis -just final time point
+```{r}
+install.packages("indicspecies")
+library(indicspecies)
+
+Bac.seq.dlab.final<-subset_samples(Bac.seq.dlab.f, time.point== "final")
+# Extract the OTU table and metadata
+otu_table <- as.data.frame(otu_table(Bac.seq.dlab.final))
+metadata <- sample_data(Bac.seq.dlab.final)
+
+# Ensure the grouping variable is a factor
+metadata$Group <- as.factor(metadata$treatment)  
+
+# Run the Indicator Species Analysis
+ind_val <- multipatt(otu_table, metadata$treatment, func = "IndVal.g", control = how(nperm = 999))
+
+# View the summary of results
+summary(ind_val)
+
+# To get significant indicator taxa
+sig_indicators <- ind_val$sign[ind_val$sign$p.value <= 0.05, ]
+sig_indicators <- na.omit(sig_indicators)
+sig_indicators <- sig_indicators[sig_indicators$p.value <= 0.044, ]
+print(sig_indicators)
+
+
+#Plot the significant taxa for CONTROLs. ####
+sig_indicators.cont<-subset(sig_indicators, s.control=="1")
+sig_indicators.cont.OTUs <- rownames(sig_indicators.cont)
+
+ps_subset.con <- prune_taxa(sig_indicators.cont.OTUs, Bac.seq.dlab.final)
+ps_melt.con <- psmelt(ps_subset.con)
+ps_melt.con$TaxaName <- ps_melt.con$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+#     #add stat back in for OTUs - not running
+#     sig_indicators.cont_with_rownames <- data.frame(RowNames = rownames(sig_indicators.cont), sig_indicators.cont)
+#     
+#     # Select only the RowNames and a specific column (e.g., column A)
+#     ps_melt.con.stat <- sig_indicators.cont_with_rownames %>%
+#       dplyr::select(RowNames, stat)
+#     rownames(ps_melt.con.stat) <- NULL
+# 
+#     # add the stats by OTU to the main df. 
+# ps_melt.con<-merge(ps_melt.con, ps_melt.con.stat,  all.x=TRUE)
+
+# Step 1: Calculate average abundance of each OTU in the control treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.con %>%
+  #filter(treatment == "control") %>%  # Filter for control treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.con with unique labels and order x-axis
+ps_melt.con <- ps_melt.con %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.con, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Controls");r
+  ggsave("Figures/dlab_final_control_indicator.jpg", plot = r, width = 8, height = 6)
+
+
+
+
+
+
+#Plot the significant taxa for DISEASE ####
+sig_indicators.dis<-subset(sig_indicators, s.disease=="1")
+sig_indicators.dis.OTUs <- rownames(sig_indicators.dis)
+
+ps_subset.dis <- prune_taxa(sig_indicators.dis.OTUs, Bac.seq.dlab.final)
+ps_melt.dis <- psmelt(ps_subset.dis)
+ps_melt.dis$TaxaName <- ps_melt.dis$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+
+# Step 1: Calculate average abundance of each OTU in the disrol treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.dis %>%
+  #filter(treatment == "disrol") %>%  # Filter for disrol treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.dis with unique labels and order x-axis
+ps_melt.dis <- ps_melt.dis %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.dis, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Disease-Exposed");r
+  ggsave("Figures/dlab_final_disease_indicator.jpg", plot = r, width = 10, height = 6)
 
   
-  ### HE from ACE
   
+ #Indicator analysis just Controls over time to see if overlap due to drift ####
+  Bac.seq.dlab.cont.time<-subset_samples(Bac.seq.dlab.f, treatment== "control")
+# Extract the OTU table and metadata
+otu_table <- as.data.frame(otu_table(Bac.seq.dlab.cont.time))
+metadata <- sample_data(Bac.seq.dlab.cont.time)
+
+# Ensure the grouping variable is a factor
+metadata$Group <- as.factor(metadata$time.point)  
+
+# Run the Indicator Species Analysis
+ind_val <- multipatt(otu_table, metadata$time.point, func = "IndVal.g", control = how(nperm = 999))
+
+# View the summary of results
+summary(ind_val)
+
+# To get significant indicator taxa
+sig_indicators <- ind_val$sign[ind_val$sign$p.value <= 0.05, ]
+sig_indicators <- na.omit(sig_indicators)
+sig_indicators <- sig_indicators[sig_indicators$p.value <= 0.044, ]
+print(sig_indicators)
+
+
+#Plot the significant taxa for CONTROLs. ####
+sig_indicators.cont<-subset(sig_indicators, s.final=="1")
+sig_indicators.cont.OTUs <- rownames(sig_indicators.cont)
+
+ps_subset.con <- prune_taxa(sig_indicators.cont.OTUs, Bac.seq.dlab.cont.time)
+ps_melt.con <- psmelt(ps_subset.con)
+ps_melt.con$TaxaName <- ps_melt.con$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+
+# Step 1: Calculate average abundance of each OTU in the control treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.con %>%
+  #filter(treatment == "control") %>%  # Filter for control treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.con with unique labels and order x-axis
+ps_melt.con <- ps_melt.con %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.con, aes(x = TaxaName, y = Abundance, fill = time.point)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("blue", "skyblue")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Controls at final time point in D. labyrinthiformis");r
+  ggsave("Figures/dlab_timepoint_control_indicator.jpg", plot = r, width = 8, height = 6)
+
+
+```
+dlab Alpha diversity 
+Alpha Diversity by Treatment (Final timepoint)
+
+Before you save final - make this again for just TF and also for ALL Time
+```{r}
+Bac.seq.S.raw<- Bac.seq.S.2
+Bac.seq.S.raw<- subset_samples(Bac.seq.S.raw, time.point!="bath")
+
+otu_table <- otu_table(Bac.seq.S.raw)
+otu_df <- as.data.frame(otu_table)
+
+Bac.seq.raw.dlab<-subset_samples(Bac.seq.S.raw, species=="Diploria labyrinthiformis")
+#Bac.seq.raw.dlab.fin<-subset_samples(Bac.seq.raw.dlab, time.point=="final")
+
+Bac.seq.raw.dlab = prune_taxa(taxa_sums(Bac.seq.raw.dlab) > 0, Bac.seq.raw.dlab) 
+Bac.seq.raw.dlab.sd <- as(sample_data(Bac.seq.raw.dlab), "data.frame") #sample df
+
+#make unifrac matrix
+Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.raw.dlab, method = "wunifrac")
+s.u.samp.df.ini <- as(sample_data(Bac.seq.raw.dlab), "data.frame") #sample df
+s.u.samp.df.ini$treatment<-as.factor(s.u.samp.df.ini$treatment)
+  s.u.samp.df.ini$time.point<-as.factor(s.u.samp.df.ini$time.point)
+
+# pull out: observed, diversity_shannon, evenness_pielou
+erich.tab.obs <-microbiome::alpha(Bac.seq.raw.dlab, index = "observed") 
+  erich.tab.obs$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+    erich.tab.obs$treatment <- as.factor(s.u.samp.df.ini$treatment)
+    erich.tab.obs$time.point <- as.factor(s.u.samp.df.ini$time.point)
+
+erich.tab.shan <-microbiome::alpha(Bac.seq.raw.dlab, index = "diversity_shannon")
+    erich.tab.shan$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+                erich.tab.shan$time.point <- as.factor(s.u.samp.df.ini$time.point)
+
+erich.tab.even <-microbiome::alpha(Bac.seq.raw.dlab, index = "evenness_pielou")
+    erich.tab.even$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+                erich.tab.shan$time.point <- as.factor(s.u.samp.df.ini$time.point)
+
+
+alpha<-merge(erich.tab.obs, erich.tab.even, by.all="sample_name")
+alpha<-merge(alpha, erich.tab.shan, by="sample_name")
+#write.csv(erich.tab.obs, "erich.tab.obs.csv")
+#add meta
+alpha<-merge(alpha, s.u.samp.df.ini, by.x="sample_name")
+
+#shannon ####
+  hist(alpha$diversity_shannon)
+  set.seed(30)
+  aov.shannon = aov(diversity_shannon ~ treatment*time.point, data=alpha)
+    summary(aov.shannon) 
+    
+#means
+shannon_mean <- ddply(alpha, c("treatment", "time.point"), summarise, #summarize cell counts
+                 N    = length(diversity_shannon[!is.na(diversity_shannon)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(diversity_shannon, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(diversity_shannon, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(diversity_shannon, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);shannon_mean
+
+#set colors
+custom_colors <- c("disease" = "#E69F00", "control" = "#56B4E9")  
+
+shannon_mean$time.point <- factor(shannon_mean$time.point, levels = c("initial", "final"))  # Adjust the levels as needed
+
+shannon_plot <- ggplot(data = shannon_mean, aes(x = time.point, y = mean, color = treatment, group = treatment)) +
+  geom_line(linewidth = 1.2) +  # Add lines connecting points
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1, show.legend = F) +
+  geom_point(size = 4, show.legend = F) +
+  xlab("") +  # Label the X Axis
+  ylab("") +  # Label the Y Axis
+  theme_bw() +  # Set the background color
+  ylab(expression(paste("Shannon Diversity"))) +
+  scale_color_manual(values = custom_colors) +  # Apply custom colors
+  ggtitle(expression("Shannon Diversity")) +
+    labs(color = NULL) +  # Remove legend label
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 20, face = "italic"));shannon_plot
+  ggsave("Figures/dlab_shannon.jpg", plot = shannon_plot, width = 8, height = 6)
+
+
+
+
+#Richness ####
+  hist(alpha$observed)
+  set.seed(30)
+  aov.observed = aov(observed ~ treatment*time.point, data=alpha)
+    summary(aov.observed) # away p=0.038
+    
+#means
+observed_mean <- ddply(alpha, c("treatment","time.point"), summarise, #summarize cell counts
+                 N    = length(observed[!is.na(observed)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(observed, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(observed, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(observed, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);observed_mean
+
+observed_mean$time.point <- factor(observed_mean$time.point, levels = c("initial", "final"))  # Adjust the levels as needed
+
+
+rich_plot<- ggplot(data = observed_mean, aes(x = time.point, y = mean, color = treatment, group = treatment)) +
+  geom_line(size = 1.2) +  # Add lines connecting points
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1, show.legend = F) +
+  geom_point(size = 4, show.legend = F) +
+  xlab("") +  # Label the X Axis
+  ylab("") +  # Label the Y Axis
+  theme_bw() +  # Set the background color
+  ylab(expression(paste("Richness"))) +
+    labs(color = NULL) +  # Remove legend label
+  scale_color_manual(values = custom_colors) +  # Apply custom colors
+  ggtitle(expression("Richness")) +
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+        aspect.ratio = 1,
+                legend.position = "none") +  # Hide the legend
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 20, face = "italic"));rich_plot
+ggsave("Figures/dlab_rich.pdf", rich_plot)
+
+
+#evenness ####
+  hist(alpha$evenness_pielou)
+  set.seed(30)
+  aov.evenness = aov(evenness_pielou ~ treatment*time.point, data=alpha)
+    summary(aov.evenness)
+    
+#means
+evenness_mean <- ddply(alpha, c("treatment","time.point"), summarise, #summarize cell counts
+                 N    = length(evenness_pielou[!is.na(evenness_pielou)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(evenness_pielou, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(evenness_pielou, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(evenness_pielou, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);evenness_mean
+
+evenness_mean$time.point <- factor(shannon_mean$time.point, levels = c("initial", "final"))  # Adjust the levels as needed
+
+even_plot<- ggplot(data = observed_mean, aes(x = time.point, y = mean, color = treatment, group = treatment)) +
+  geom_line(size = 1.2) +  # Add lines connecting points
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1, show.legend = T) +
+  geom_point(size = 4, show.legend = F) +
+  xlab("") +  # Label the X Axis
+  ylab("") +  # Label the Y Axis
+  theme_bw() +  # Set the background color
+  ylab(expression(paste("Richness"))) +
+  scale_color_manual(values = custom_colors) +  # Apply custom colors
+  ggtitle(expression("Evenness")) +
+    labs(color = NULL) +  # Remove legend label
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+        aspect.ratio = 1,                legend.position = "none") +  # Hide the legend
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 20, face = "italic"));even_plot
+ggsave("Figures/dlab_even.pdf", even_plot)
+
+library(grid)
+
+g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
+            # widths = c(1, 1, 1),  # Adjust widths as needed
+            # heights = c(3),       # Adjust heights as needed
+           #  asp = 1)              # Set aspect ratio
+ggsave("Figures/dlab_alpha.pdf", g)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##OLD
+
+##OLD
+```{r}
 ##Core Analysis ####
-cnat.core <- core(Bac.seq.cnat.f, detection = 0.0001, prevalence = .90)
+cnat.core <- core(Bac.seq.cnat.f, detection = 0.0001, prevalence = .95)
 cnat.core.taxa <- tax_table(cnat.core)
 View(as.data.frame(cnat.core.taxa))
 
@@ -1278,175 +3051,9 @@ print(both)
 print(only_set1)
 print(only_set2)
 
-
-### Alpha diversity ####
-#Bac.seq.S.raw
-
-
-Bac.seq.raw.cnat<-subset_samples(Bac.seq.S.raw, species=="Colpophyllia natans")
-Bac.seq.raw.cnat<-subset_samples(Bac.seq.raw.cnat, time.point=="final")
-
-Bac.seq.raw.cnat = prune_taxa(taxa_sums(Bac.seq.raw.cnat) > 0, Bac.seq.raw.cnat) 
-Bac.seq.raw.cnat.sd <- as(sample_data(Bac.seq.raw.cnat), "data.frame") #sample df
-
-#make unifrac matrix
-Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.raw.cnat, method = "wunifrac")
-s.u.samp.df.ini <- as(sample_data(Bac.seq.raw.cnat), "data.frame") #sample df
-s.u.samp.df.ini$treatment<-as.factor(s.u.samp.df.ini$treatment)
-  
-# pull out: observed, diversity_shannon, evenness_pielou
-erich.tab.obs <-microbiome::alpha(Bac.seq.raw.cnat, index = "observed") 
-  erich.tab.obs$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
-    erich.tab.obs$treatment <- as.factor(s.u.samp.df.ini$treatment)
-
-erich.tab.shan <-microbiome::alpha(Bac.seq.raw.cnat, index = "diversity_shannon")
-    erich.tab.shan$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
-        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
-
-erich.tab.even <-microbiome::alpha(Bac.seq.raw.cnat, index = "evenness_pielou")
-    erich.tab.even$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
-        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
-
-alpha<-merge(erich.tab.obs, erich.tab.even, by.all="sample_name")
-alpha<-merge(alpha, erich.tab.shan, by="sample_name")
-#write.csv(erich.tab.obs, "erich.tab.obs.csv")
-#add meta
-alpha<-merge(alpha, s.u.samp.df.ini, by.x="sample_name")
-
-#shannon ####
-  hist(alpha$diversity_shannon)
-  set.seed(30)
-  aov.shannon = aov(diversity_shannon ~ treatment, data=alpha)
-    summary(aov.shannon) 
-    
-#means
-shannon_mean <- ddply(alpha, c("treatment"), summarise, #summarize cell counts
-                 N    = length(diversity_shannon[!is.na(diversity_shannon)]), #calculate the length of the data frame, excluding NA’s
-                 mean = mean(diversity_shannon, na.rm=TRUE), #calculate mean of response variable, removing NA's
-                 sd   = sd(diversity_shannon, na.rm=TRUE), #calculate standard deviation
-                 se   = sd / sqrt(N), #calculate standard error
-                 max = max(diversity_shannon, na.rm=TRUE) #calculate max, could also calculate min () if desired
-);shannon_mean
-
-#set colors
-custom_colors <- c("disease" = "#E69F00", "control" = "#56B4E9")  
-custom_labels <- c("Control", "SCTLD-Exposed")  # Replace with your actual labels
-
-
-shannon_plot<-ggplot(data=shannon_mean, aes(x=treatment, y=mean, color=treatment)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
-                width=0.1, show.legend = T)+
-  geom_point(aes(color=treatment), size=4, show.legend = F)+
-  xlab("") + #Label the X Axis
-    ylab("") + #Label the X Axis
-  theme_bw() + #Set the background color
-  theme(axis.line = element_line(color = 'black'), #Set the axes color
-        axis.title=element_text(size=14,face="bold"), #Set axis format
-        panel.border = element_blank(), #Set the border
-        panel.grid.major = element_blank(), #Set the major gridlines
-        panel.grid.minor = element_blank(), #Set the minor gridlines
-        text = element_text(size=18),  # set element text
-        plot.background =element_blank(), #Set the plot background
-        legend.key = element_blank()) + #Set plot legend key
-        theme(aspect.ratio=1)+
-   ylab(expression(paste("Shannon Diversity"))) +
-    scale_color_manual(values = custom_colors) + # Apply custom colors
-        scale_x_discrete(labels = custom_labels)+
-  ggtitle(expression(italic("C. natans") ~ "- Shannon diversity"))+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  theme(plot.title = element_text(size=20, face = "italic"));shannon_plot
-ggsave("Figures/cnat_shannon.pdf", shannon_plot)
-
-#Richness ####
-  hist(alpha$observed)
-  set.seed(30)
-  aov.observed = aov(observed ~ treatment, data=alpha)
-    summary(aov.observed) # away p=0.038
-    
-#means
-observed_mean <- ddply(alpha, c("treatment"), summarise, #summarize cell counts
-                 N    = length(observed[!is.na(observed)]), #calculate the length of the data frame, excluding NA’s
-                 mean = mean(observed, na.rm=TRUE), #calculate mean of response variable, removing NA's
-                 sd   = sd(observed, na.rm=TRUE), #calculate standard deviation
-                 se   = sd / sqrt(N), #calculate standard error
-                 max = max(observed, na.rm=TRUE) #calculate max, could also calculate min () if desired
-);observed_mean
-
-rich_plot<-ggplot(data=observed_mean, aes(x=treatment, y=mean, color=treatment)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
-                width=0.1, show.legend = T)+
-  geom_point(aes(color=treatment), size=4, show.legend = F)+
-  xlab("") + #Label the X Axis
-    ylab("") + #Label the X Axis
-  theme_bw() + #Set the background color
-  theme(axis.line = element_line(color = 'black'), #Set the axes color
-        axis.title=element_text(size=14,face="bold"), #Set axis format
-        panel.border = element_blank(), #Set the border
-        panel.grid.major = element_blank(), #Set the major gridlines
-        panel.grid.minor = element_blank(), #Set the minor gridlines
-        text = element_text(size=18),  # set element text
-        plot.background =element_blank(), #Set the plot background
-        legend.key = element_blank()) + #Set plot legend key
-        theme(aspect.ratio=1)+
-   ylab(expression(paste("Richness"))) +
-    scale_color_manual(values = custom_colors) + # Apply custom colors
-        scale_x_discrete(labels = custom_labels)+
-  ggtitle(expression(italic("C. natans") ~ "- Richness"))+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  theme(plot.title = element_text(size=20, face = "italic"));rich_plot
-ggsave("Figures/cnat_rich.pdf", rich_plot)
-
-
-#evenness ####
-  hist(alpha$evenness_pielou)
-  set.seed(30)
-  aov.evenness = aov(evenness_pielou ~ treatment, data=alpha)
-    summary(aov.evenness) # home p<0.001, away p<0.001, genet p<0.001, home*away p<0.001
-    
-#means
-evenness_mean <- ddply(alpha, c("treatment"), summarise, #summarize cell counts
-                 N    = length(evenness_pielou[!is.na(evenness_pielou)]), #calculate the length of the data frame, excluding NA’s
-                 mean = mean(evenness_pielou, na.rm=TRUE), #calculate mean of response variable, removing NA's
-                 sd   = sd(evenness_pielou, na.rm=TRUE), #calculate standard deviation
-                 se   = sd / sqrt(N), #calculate standard error
-                 max = max(evenness_pielou, na.rm=TRUE) #calculate max, could also calculate min () if desired
-);evenness_mean
-
-even_plot<-ggplot(data=evenness_mean, aes(x=treatment, y=mean, color=treatment)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
-                width=0.1, show.legend = T)+
-  geom_point(aes(color=treatment), size=4, show.legend = F)+
-  xlab("") + #Label the X Axis
-    ylab("") + #Label the X Axis
-  theme_bw() + #Set the background color
-  theme(axis.line = element_line(color = 'black'), #Set the axes color
-        axis.title=element_text(size=14,face="bold"), #Set axis format
-        panel.border = element_blank(), #Set the border
-        panel.grid.major = element_blank(), #Set the major gridlines
-        panel.grid.minor = element_blank(), #Set the minor gridlines
-        text = element_text(size=18),  # set element text
-        plot.background =element_blank(), #Set the plot background
-        legend.key = element_blank()) + #Set plot legend key
-        theme(aspect.ratio=1)+
-   ylab(expression(paste("Evenness"))) +
-    scale_color_manual(values = custom_colors) + # Apply custom colors
-        scale_x_discrete(labels = custom_labels)+
-  ggtitle(expression(italic("C. natans") ~ "- Evenness"))+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  theme(plot.title = element_text(size=20, face = "italic"));even_plot
-ggsave("Figures/cnat_even.pdf", even_plot)
-
-library(grid)
-
-g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
-            # widths = c(1, 1, 1),  # Adjust widths as needed
-            # heights = c(3),       # Adjust heights as needed
-           #  asp = 1)              # Set aspect ratio
-ggsave("Figures/cnat_alpha.pdf", g)
-
-
-
 ```
+
+
 
 #D. lab 
 Diploria labyrinthiformis
@@ -1872,6 +3479,768 @@ g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
 ggsave("Figures/dlab_alpha.pdf", g)
 
 ```
+#P. strigosa final 
+PERMANOVA and Visualization
+```{r}
+#look at any change in control corals initial-final (not diseased)
+Bac.seq.pstr<-subset_samples(Bac.seq.rel, species== "Pseudodiploria strigosa")
+Bac.seq.pstr.control<-subset_samples(Bac.seq.pstr, treatment== "control")
+Bac.seq.pstr.control = prune_taxa(taxa_sums(Bac.seq.pstr.control) > 0, Bac.seq.pstr.control) #this removes any OTU with 0s
+Bac.seq.pstr.control.sd <- as(sample_data(Bac.seq.pstr.control), "data.frame") #look at samp data
+
+#make unifrac matrix
+Bac.seq.pstr.control.wu <- phyloseq::distance(Bac.seq.pstr.control, method = "wunifrac")
+s.u.samp.pstr.control.df <- as(sample_data(Bac.seq.pstr.control), "data.frame") #sample df
+
+#adonixs test between sample types: p=0.001 shows drift in controls
+set.seed(30)
+adonis2(Bac.seq.pstr.control.wu ~ time.point, data = s.u.samp.pstr.control.df)
+
+# Homogeneity of dispersion test  - no differences 
+    set.seed(30) 
+    permutest(betadisper(Bac.seq.pstr.control.wu, s.u.samp.pstr.control.df$time.point, type = "centroid"))
+  ball<-  betadisper(Bac.seq.pstr.control.wu, s.u.samp.pstr.control.df$time.point, type = "centroid")
+  TukeyHSD(ball,  ordered = FALSE,conf.level = 0.95)
+
+#final time point only ####
+Bac.seq.pstr<-subset_samples(Bac.seq.rel, species== "Pseudodiploria strigosa")
+Bac.seq.pstr<-subset_samples(Bac.seq.pstr, time.point== "final")
+Bac.seq.pstr.f<-Bac.seq.pstr #make a copy
+Bac.seq.pstr.f = prune_taxa(taxa_sums(Bac.seq.pstr.f) > 0, Bac.seq.pstr.f) #this removes any OTU with 0s
+
+Bac.seq.pstr.f.sd <- as(sample_data(Bac.seq.pstr.f), "data.frame") #look at samp data
+
+#make unifrac matrix
+Bac.seq.wu.pstr.f <- phyloseq::distance(Bac.seq.pstr.f, method = "wunifrac")
+s.u.samp.pstr.f.df <- as(sample_data(Bac.seq.pstr.f), "data.frame") #sample df
+
+#adonixs test between sample types: p=
+set.seed(30)
+adonis2(Bac.seq.wu.pstr.f ~ treatment, data = Bac.seq.pstr.f.sd)
+
+# Homogeneity of dispersion test  
+    set.seed(30) 
+    permutest(betadisper(Bac.seq.wu.pstr.f, s.u.samp.pstr.f.df$treatment, type = "centroid"))
+  ball<-  betadisper(Bac.seq.wu.pstr.f, s.u.samp.pstr.f.df$treatment, type = "centroid")
+  #TukeyHSD(ball,  ordered = FALSE,conf.level = 0.95)
+
+#plot
+
+##### NMDS ####
+unifrac.pstr.f <- ordinate(Bac.seq.pstr.f, method="NMDS", "unifrac",weighted=TRUE, set.seed(30)) 
+stressplot(unifrac.pstr.f)
+print(unifrac.pstr.f)# stress score .172
+scores.ord.u_RelA_stats.pstr<-as.data.frame(cbind(vegan::scores(unifrac.pstr.f, display="sites")))  
+     Bac.seq.pstr.f.sd <- as(sample_data(Bac.seq.pstr.f), "data.frame") #sample df
+
+scores.ord.u_RelA_stats.pstr$treatment <- Bac.seq.pstr.f.sd$treatment
+
+p<-ggplot(scores.ord.u_RelA_stats.pstr, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(aes(colour = treatment), size = 4) +
+    scale_color_manual(values=c("turquoise3","orange"), name=NULL)+
+  stat_ellipse(aes(x = NMDS1, y = NMDS2, colour = treatment), linetype = 2) +
+  ggtitle(expression(italic("Pseudodiploria strigosa") * " Microbial Communities After Treatment NMDS")) +
+  
+  theme_classic();p
+ggsave("Figures/pstr.final_NMDS.jpg", plot = p, width = 8, height = 6) 
+```
+pstr final bar plots
+Same code from above initial
+```{r}
+
+#family####
+Bac.fam.fin.pstr <- Bac.seq.pstr.f %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.fin.pstr <- psmelt(Bac.fam.fin.pstr)
+  
+  Bac.fam.avg.pstr <- Bac.fam.melt.fin.pstr %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop.pstr <- Bac.fam.avg.pstr %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  f<-ggplot(Bac.fam.prop.pstr, aes(x = treatment, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "hide",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;f
+  ggsave("Figures/pstr_final_bar_treatment.jpg", plot = f, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.fin <- psmelt(Bac.fam.fin)
+  
+  Bac.fam.avg.pstr <- Bac.fam.melt.fin %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop.pstr <- Bac.fam.avg.pstr %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.pstr <- Bac.fam.prop.pstr %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop.pstr <- Bac.fam.prop.pstr %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla.pstr$Family & treatment %in% top_10_phyla.pstr$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+g<-ggplot(Bac.fam.prop.pstr, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop.pstr$FillColor[!Bac.fam.prop.pstr$FillColor == "Other"]))), unique(Bac.fam.prop.pstr$FillColor[!Bac.fam.prop.pstr$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;g
+  ggsave("Figures/final_bar_species_famTOP10_pstr.jpg", plot = g, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10.pstr<-subset(Bac.fam.prop.pstr, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+h<-ggplot(Bac.fam.prop.Top10.pstr, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) +
+  facet_wrap(~Family);h # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_pstr.jpg", plot = h, width = 18, height = 8)
+  
+  
+  
+  
+#phylum####
+Bac.phy.fin.pstr <- Bac.fam.fin %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.fin <- psmelt(Bac.phy.fin.pstr)
+  
+  Bac.phy.avg.pstr <- Bac.phy.melt.fin %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.pstr <- Bac.phy.avg.pstr %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  i<-ggplot(Bac.phy.prop.pstr, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;i
+    ggsave("Figures/fin_bar_species.phylum_pstr.jpg", plot = i, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.fin.pstr <- psmelt(Bac.phy.fin.pstr)
+  
+  Bac.phy.avg.pstr <- Bac.phy.melt.fin.pstr %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop.pstr <- Bac.phy.avg.pstr %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla.pstr <- Bac.phy.prop.pstr %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop.pstr <- Bac.phy.prop.pstr %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla.pstr$Phylum & treatment %in% top_10_phyla.pstr$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+j<-ggplot(Bac.phy.prop.pstr, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop.pstr$FillColor[!Bac.phy.prop.pstr$FillColor == "Other"]))), unique(Bac.phy.prop.pstr$FillColor[!Bac.phy.prop.pstr$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;j
+  ggsave("Figures/fin_bar_species_phyTOP10_pstr.jpg", plot = j, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10.pstr<-subset(Bac.phy.prop.pstr, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+k<-ggplot(Bac.phy.prop.Top10.pstr, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"))+
+  facet_wrap(~Phylum);k  # Add plot title
+  ggsave("Figures/fin_bar_species_phyTOP10_FACET_pstr.jpg", plot = k, width = 8, height = 6)
+```
+pstr Core taxa
+```{r}
+
+# Count unique OTUs or ASVs (this is too high res)
+otu_table.pstr <- otu_table(Bac.seq.pstr.f)
+unique_otus <- sum(otu_table.pstr > 0, na.rm = TRUE)
+print(unique_otus)
+
+#core controls
+Bac.seq.pstr.f.con<-subset_samples(Bac.seq.pstr.f, treatment=="control")
+core.taxa.standard.con <- core_members(Bac.seq.pstr.f.con, detection = 0.0001, prevalence = .95)
+core.taxa.standard.con
+
+taxonomy_table.con <- tax_table(Bac.seq.pstr.f.con)
+core_taxonomy.con <- taxonomy_table.con[rownames(taxonomy_table.con) %in% core.taxa.standard.con, ]
+core_taxonomy.con_df <- as.data.frame(core_taxonomy.con)
+print(core_taxonomy.con_df)
+
+#core treatment
+Bac.seq.pstr.f.treat<-subset_samples(Bac.seq.pstr.f, treatment=="disease")
+core.taxa.standard.treat <- core_members(Bac.seq.pstr.f.treat, detection = 0.0001, prevalence = .95)
+core.taxa.standard.treat
+
+taxonomy_table.treat <- tax_table(Bac.seq.pstr.f.treat)
+core_taxonomy.treat <- taxonomy_table.treat[rownames(taxonomy_table.treat) %in% core.taxa.standard.treat, ]
+core_taxonomy.treat_df <- as.data.frame(core_taxonomy.treat)
+print(core_taxonomy.treat_df)
+
+
+######## try to do by treatment
+
+#family####
+Bac.fam.pstr <- Bac.seq.pstr.f %>% 
+  tax_glom(taxrank = "Family", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  
+  Bac.fam.melt.pstr <- psmelt(Bac.fam.pstr)
+  
+  Bac.fam.avg <- Bac.fam.melt.pstr %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  k<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment")) ;k
+  ggsave("Figures/fin_bar_species_pstr.jpg", plot = k, width = 8, height = 6)
+
+ #Do these plots again by top 10 taxa levels ####
+
+#try top 10 first family ####
+  Bac.fam.melt.pstr <- psmelt(Bac.seq.pstr.f)
+  
+  Bac.fam.avg <- Bac.fam.melt.pstr %>%
+  group_by(treatment, Family) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.fam.prop <- Bac.fam.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.fam.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Family)
+
+# 6. Create a new column in Bac.fam.prop to indicate top 10 status
+Bac.fam.prop <- Bac.fam.prop %>%
+  mutate(FillColor = ifelse(Family %in% top_10_phyla$Family & treatment %in% top_10_phyla$treatment, Family, "Other"))
+
+# 7. Plot the data with custom colors
+m<-ggplot(Bac.fam.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"]))), unique(Bac.fam.prop$FillColor[!Bac.fam.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment")) ;m
+  ggsave("Figures/fin_bar_species_famTOP10_pstr.jpg", plot = l, width = 8, height = 6)
+
+#Plot individual Family
+# remove "other" in FillColor and then facet by Family
+Bac.fam.prop.Top10<-subset(Bac.fam.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+n<-ggplot(Bac.fam.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("#E69F00", "#56B4E9"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Family Abundance by SCTLD Exposure Treatment"))+
+  facet_wrap(~Family);n  # Add plot title
+  ggsave("Figures/fin_bar_species_famTOP10_FACET_pstr.jpg", plot = n, width = 18, height = 8)
+  
+  
+
+#phylum####
+Bac.phy.pstr <- Bac.seq.pstr.f %>% 
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>% 
+  transform_sample_counts(function(x) {x/sum(x)} ) 
+  Bac.phy.melt.pstr <- psmelt(Bac.phy.pstr)
+  
+  Bac.phy.avg <- Bac.phy.melt.pstr %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+  n<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = Phylum)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+   theme(legend.position = "none",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));n
+  ggsave("Figures/fin_bar_species.phylum_pstr.jpg", plot = n, width = 8, height = 6)
+
+#try top 10 Phylum ####
+  Bac.phy.melt.pstr <- psmelt(Bac.phy.pstr)
+  
+  Bac.phy.avg <- Bac.phy.melt.pstr %>%
+  group_by(treatment, Phylum) %>%
+  summarize(Avg_Abundance = mean(Abundance, na.rm = TRUE))
+  
+  Bac.phy.prop <- Bac.phy.avg %>%
+  group_by(treatment) %>%
+  mutate(Prop_Abundance = Avg_Abundance / sum(Avg_Abundance))
+
+# 5. Identify the top 10 phyla for each gender
+  top_10_phyla <- Bac.phy.prop %>%
+  group_by(treatment) %>%
+  arrange(treatment, desc(Prop_Abundance)) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  dplyr::select(treatment, Phylum)
+
+# 6. Create a new column in Bac.phy.prop to indicate top 10 status
+Bac.phy.prop <- Bac.phy.prop %>%
+  mutate(FillColor = ifelse(Phylum %in% top_10_phyla$Phylum & treatment %in% top_10_phyla$treatment, Phylum, "Other"))
+
+# 7. Plot the data with custom colors
+o<-ggplot(Bac.phy.prop, aes(x = treatment, y = Prop_Abundance, fill = FillColor)) +
+  geom_bar(stat = "identity", position = "fill") +  # "fill" ensures the bars sum to 100%
+  scale_fill_manual(values = c(setNames(rainbow(length(unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"]))), unique(Bac.phy.prop$FillColor[!Bac.phy.prop$FillColor == "Other"])), "Other" = "gray")) +  # Custom colors for top 10 and gray for others
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+   ggtitle(expression(italic("Pseudodiploria strigosa") * " Proportional Microbiome Phylum Abundance by SCTLD Exposure Treatment"));o
+  ggsave("Figures/fin_bar_species_phyTOP10_pstr.jpg", plot = o, width = 8, height = 6)
+
+#Plot individual phyily
+# remove "other" in FillColor and then facet by phyily
+Bac.phy.prop.Top10<-subset(Bac.phy.prop, FillColor!="Other")
+  
+  # 7. Plot the data with custom colors
+p<-ggplot(Bac.phy.prop.Top10, aes(x = treatment, y = Prop_Abundance, fill = treatment)) +
+  geom_bar(stat = "identity") +  # "fill" ensures the bars sum to 100%
+    scale_fill_manual(values=c("orange","turquoise3"))+
+  ylab("Proportion of Abundance") +
+  xlab("") +
+  scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+  theme(legend.position = "right",            # Hide the legend
+        axis.text.x = element_text(angle = 90, hjust = 1, face = "italic"),  # Italicize x-axis labels
+        panel.background = element_blank(),    # Remove the gray panel background
+        plot.background = element_blank(),     # Remove the gray plot background
+        panel.grid.major = element_line(color = "grey80"),  # Retain major grid lines
+        panel.grid.minor = element_line(color = "grey90")) + # Retain minor grid lines
+  ggtitle("Proportional Microbiome Top 10 Phylum Abundance by Coral Species")+
+  facet_wrap(~Phylum);p  # Add plot title
+  ggsave("Figures/initial_bar_species_phyTOP10_FACET.jpg", plot = e, width = 8, height = 6)
+```
+pstr bubble
+```{r}
+pstr.core <- core(Bac.seq.pstr.f, detection = 0.001, prevalence = .95)
+pstr.core.taxa <- tax_table(pstr.core)
+View(as.data.frame(pstr.core.taxa))
+pstr.core.melt <- psmelt(pstr.core)
+pstr.core.melt$top.group <- "core"
+write.csv(pstr.core.melt, "stats/pstr_core.csv")
+
+pstr.core.melt$Sample <- factor(pstr.core.melt$Sample, levels = pstr.core.melt$Sample[order(pstr.core.melt$treatment)])
+
+
+##Plotting
+  q <- ggplot(pstr.core.melt, aes(x = factor(Sample, levels = unique(Sample[order(treatment)])), 
+                                     y = Genus, size = Abundance, color = treatment)) +
+  geom_point(aes(color=treatment)) +
+  scale_size_area(max_size = 6, breaks = c(0.05, 0.1, 0.3, 0.5, 0.7, 0.9)) +
+  coord_fixed(ratio = 0.9) +
+    scale_color_manual(values=c("orange","turquoise3"))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        aspect.ratio = 0.7);q
+  ggsave("Figures/pstr_core_bubble_final.jpg", plot = q, width = 8, height = 4)
+
+```
+pstr  - indicator analysis
+```{r}
+#install.packages("indicspecies")
+library(indicspecies)
+
+# Extract the OTU table and metadata
+otu_table <- as.data.frame(otu_table(Bac.seq.pstr.f))
+metadata <- sample_data(Bac.seq.pstr.f)
+
+# Ensure the grouping variable is a factor
+metadata$Group <- as.factor(metadata$treatment)  
+
+# Run the Indicator Species Analysis
+ind_val <- multipatt(otu_table, metadata$treatment, func = "IndVal.g", control = how(nperm = 999))
+
+# View the summary of results
+summary(ind_val)
+
+# To get significant indicator taxa
+sig_indicators <- ind_val$sign[ind_val$sign$p.value <= 0.05, ]
+sig_indicators <- na.omit(sig_indicators)
+sig_indicators <- sig_indicators[sig_indicators$p.value <= 0.044, ]
+print(sig_indicators)
+
+
+#Plot the significant taxa for CONTROLs. ####
+sig_indicators.cont<-subset(sig_indicators, s.control=="1")
+sig_indicators.cont.OTUs <- rownames(sig_indicators.cont)
+
+ps_subset.con <- prune_taxa(sig_indicators.cont.OTUs, Bac.seq.pstr.f)
+ps_melt.con <- psmelt(ps_subset.con)
+ps_melt.con$TaxaName <- ps_melt.con$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+
+# Step 1: Calculate average abundance of each OTU in the control treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.con %>%
+  #filter(treatment == "control") %>%  # Filter for control treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.con with unique labels and order x-axis
+ps_melt.con <- ps_melt.con %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.con, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3"),name=NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Controls");r
+  ggsave("Figures/pstr_final_control_indicator.jpg", plot = r, width = 8, height = 6)
+
+
+
+
+
+
+#Plot the significant taxa for DISEASE ####
+sig_indicators.dis<-subset(sig_indicators, s.disease=="1")
+sig_indicators.dis.OTUs <- rownames(sig_indicators.dis)
+
+ps_subset.dis <- prune_taxa(sig_indicators.dis.OTUs, Bac.seq.pstr.f)
+ps_melt.dis <- psmelt(ps_subset.dis)
+ps_melt.dis$TaxaName <- ps_melt.dis$Genus  # Replace 'Genus' with the desired taxonomic rank (e.g., Family, Order)
+
+
+# Step 1: Calculate average abundance of each OTU in the disrol treatment and get the corresponding TaxaLabel order
+otu_order <- ps_melt.dis %>%
+  #filter(treatment == "disrol") %>%  # Filter for disrol treatment
+  group_by(OTU, TaxaName) %>%  # Group by OTU and TaxaName
+  #summarize(Avg_Abundance = mean(Abundance), .groups = "drop") %>%  # Calculate mean abundance
+    arrange(desc("stat")) %>%  # Arrange by descending stat value
+  #arrange(desc(Avg_Abundance)) %>%  # Arrange by descending average abundance
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) %>%  # Create unique labels
+  pull(TaxaLabel)  # Extract the ordered unique labels
+ 
+
+# Step 2: Create a new column in ps_melt.dis with unique labels and order x-axis
+ps_melt.dis <- ps_melt.dis %>%
+  mutate(TaxaLabel = paste(TaxaName, OTU, sep = "_")) 
+
+# Step 3: Create the plot with the ordered TaxaLabel on the x-axis
+r <- ggplot(ps_melt.dis, aes(x = TaxaName, y = Abundance, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  scale_fill_manual(values = c("orange", "turquoise3"),name=NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Abundance") +
+  xlab("Indicator taxa in Disease-Exposed");r
+  ggsave("Figures/pstr_final_disease_indicator.jpg", plot = r, width = 8, height = 6)
+
+```
+pstr Alpha diversity 
+Alpha Diversity by Treatment (Final timepoint)
+```{r}
+Bac.seq.S.raw<- Bac.seq.S.2
+
+otu_table <- otu_table(Bac.seq.S.raw)
+otu_df <- as.data.frame(otu_table)
+
+Bac.seq.raw.pstr<-subset_samples(Bac.seq.S.raw, species=="Pseudodiploria strigosa")
+Bac.seq.raw.pstr<-subset_samples(Bac.seq.raw.pstr, species=!"bath")
+Bac.seq.raw.pstr.fin<-subset_samples(Bac.seq.raw.pstr, time.point=="final")
+
+Bac.seq.raw.pstr.fin = prune_taxa(taxa_sums(Bac.seq.raw.pstr.fin) > 0, Bac.seq.raw.pstr.fin) 
+Bac.seq.raw.pstr.sd <- as(sample_data(Bac.seq.raw.pstr.fin), "data.frame") #sample df
+
+#make unifrac matrix
+Bac.seq.wu.ini <- phyloseq::distance(Bac.seq.raw.pstr.fin, method = "wunifrac")
+s.u.samp.df.ini <- as(sample_data(Bac.seq.raw.pstr.fin), "data.frame") #sample df
+s.u.samp.df.ini$treatment<-as.factor(s.u.samp.df.ini$treatment)
+  
+# pull out: observed, diversity_shannon, evenness_pielou
+erich.tab.obs <-microbiome::alpha(Bac.seq.raw.pstr.fin, index = "observed") 
+  erich.tab.obs$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+    erich.tab.obs$treatment <- as.factor(s.u.samp.df.ini$treatment)
+
+erich.tab.shan <-microbiome::alpha(Bac.seq.raw.pstr.fin, index = "diversity_shannon")
+    erich.tab.shan$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+
+erich.tab.even <-microbiome::alpha(Bac.seq.raw.pstr.fin, index = "evenness_pielou")
+    erich.tab.even$sample_name <- as.factor(s.u.samp.df.ini$sample_name)
+        erich.tab.shan$treatment <- as.factor(s.u.samp.df.ini$treatment)
+
+
+alpha<-merge(erich.tab.obs, erich.tab.even, by.all="sample_name")
+alpha<-merge(alpha, erich.tab.shan, by="sample_name")
+#write.csv(erich.tab.obs, "erich.tab.obs.csv")
+#add meta
+alpha<-merge(alpha, s.u.samp.df.ini, by.x="sample_name")
+
+#shannon ####
+  hist(alpha$diversity_shannon)
+  set.seed(30)
+  aov.shannon = aov(diversity_shannon ~ treatment.x, data=alpha)
+    summary(aov.shannon) 
+    
+#means
+shannon_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(diversity_shannon[!is.na(diversity_shannon)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(diversity_shannon, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(diversity_shannon, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(diversity_shannon, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);shannon_mean
+
+#set colors
+custom_colors <- c("disease" = "#E69F00", "control" = "#56B4E9")  
+custom_labels <- c("Control", "SCTLD-Exposed")  # Replace with your actual labels
+
+
+shannon_plot<-ggplot(data=shannon_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Shannon Diversity"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Shannon diversity")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));shannon_plot
+ggsave("Figures/pstr_shannon.pdf", shannon_plot)
+
+#Richness ####
+  hist(alpha$observed)
+  set.seed(30)
+  aov.observed = aov(observed ~ treatment.x, data=alpha)
+    summary(aov.observed) # away p=0.038
+    
+#means
+observed_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(observed[!is.na(observed)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(observed, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(observed, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(observed, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);observed_mean
+
+rich_plot<-ggplot(data=observed_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+  theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Richness"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Richness")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));rich_plot
+ggsave("Figures/pstr_rich.pdf", rich_plot)
+
+
+#evenness ####
+  hist(alpha$evenness_pielou)
+  set.seed(30)
+  aov.evenness = aov(evenness_pielou ~ treatment.x, data=alpha)
+    summary(aov.evenness) # home p<0.001, away p<0.001, genet p<0.001, home*away p<0.001
+    
+#means
+evenness_mean <- ddply(alpha, c("treatment.x"), summarise, #summarize cell counts
+                 N    = length(evenness_pielou[!is.na(evenness_pielou)]), #calculate the length of the data frame, excluding NA’s
+                 mean = mean(evenness_pielou, na.rm=TRUE), #calculate mean of response variable, removing NA's
+                 sd   = sd(evenness_pielou, na.rm=TRUE), #calculate standard deviation
+                 se   = sd / sqrt(N), #calculate standard error
+                 max = max(evenness_pielou, na.rm=TRUE) #calculate max, could also calculate min () if desired
+);evenness_mean
+
+even_plot<-ggplot(data=evenness_mean, aes(x=treatment.x, y=mean, color=treatment.x)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                width=0.1, show.legend = T)+
+  geom_point(aes(color=treatment.x), size=4, show.legend = F)+
+  xlab("") + #Label the X Axis
+    ylab("") + #Label the X Axis
+  theme_bw() + #Set the background color
+    theme(axis.line = element_line(color = 'black'), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        text = element_text(size = 18),  
+        plot.background = element_blank(), 
+        legend.key = element_blank(),
+         legend.position = "none",  # Hide the legend
+        aspect.ratio = 1)+
+   ylab(expression(paste("Evenness"))) +
+    scale_color_manual(values = custom_colors) + # Apply custom colors
+        scale_x_discrete(labels = custom_labels)+
+  ggtitle("Evenness")+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(plot.title = element_text(size=20, face = "italic"));even_plot
+ggsave("Figures/pstr_even.pdf", even_plot)
+
+library(grid)
+
+g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
+            # widths = c(1, 1, 1),  # Adjust widths as needed
+            # heights = c(3),       # Adjust heights as needed
+           #  asp = 1)              # Set aspect ratio
+ggsave("Figures/pstr_alpha.jpg", g)
+
+
+
+```
+
 
 
 #P str.  
@@ -2297,6 +4666,6 @@ g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
             # widths = c(1, 1, 1),  # Adjust widths as needed
             # heights = c(3),       # Adjust heights as needed
            #  asp = 1)              # Set aspect ratio
-ggsave("Figures/pstr_alpha.pdf", g)
+ggsave("Figures/pstr_alpha.jpg", plot = g, width = 11, height = 4) 
 
 ```
