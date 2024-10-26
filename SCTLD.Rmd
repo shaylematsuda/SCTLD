@@ -5,6 +5,7 @@ date: "2024-04-15"
 editor_options: 
   chunk_output_type: console
 ---
+test
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -2918,7 +2919,7 @@ g<-grid.arrange(rich_plot, even_plot, shannon_plot, nrow = 1,ncol=3)
             # widths = c(1, 1, 1),  # Adjust widths as needed
             # heights = c(3),       # Adjust heights as needed
            #  asp = 1)              # Set aspect ratio
-ggsave("Figures/dlab_alpha.pdf", g)
+ggsave("Figures/dlab_alpha.pdf", g, width=9, height=6)
 
 
 
